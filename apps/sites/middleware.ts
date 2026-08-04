@@ -20,8 +20,25 @@ const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? "aivexallp.com").toL
 // must be treated as a base host exactly like the real BASE_DOMAIN. Without
 // this, /preview/site/[id] gets misrouted through the tenant rewrite below
 // and renders the "no active website" holding page instead of the draft.
+function hostnameOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url.includes("://") ? url : `https://${url}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 const VERCEL_DEPLOYMENT_HOSTS = new Set(
-  [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    // Whatever host this app is actually reachable at (custom domain or
+    // vercel.app) — e.g. admin's preview iframe / sites.aivexallp.com. Any
+    // subdomain of BASE_DOMAIN would otherwise be swallowed by the tenant
+    // rewrite below and mistaken for a tenant slug.
+    hostnameOf(process.env.NEXT_PUBLIC_SITES_URL ?? undefined),
+  ]
     .filter((v): v is string => Boolean(v))
     .map((v) => v.toLowerCase())
 );
