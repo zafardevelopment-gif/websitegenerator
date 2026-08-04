@@ -15,12 +15,25 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? "aivexallp.com").toLowerCase();
 
+// The bare Vercel deployment URL(s) for this project — admin's live preview
+// iframe hits this host directly (no tenant subdomain exists for it), so it
+// must be treated as a base host exactly like the real BASE_DOMAIN. Without
+// this, /preview/site/[id] gets misrouted through the tenant rewrite below
+// and renders the "no active website" holding page instead of the draft.
+const VERCEL_DEPLOYMENT_HOSTS = new Set(
+  [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => v.toLowerCase())
+);
+
 function resolveTenant(hostname: string): string | null {
   if (
     hostname === BASE_DOMAIN ||
     hostname === `www.${BASE_DOMAIN}` ||
     hostname === "localhost" ||
-    hostname === "127.0.0.1"
+    hostname === "127.0.0.1" ||
+    VERCEL_DEPLOYMENT_HOSTS.has(hostname) ||
+    hostname.endsWith(".vercel.app")
   ) {
     return null;
   }
