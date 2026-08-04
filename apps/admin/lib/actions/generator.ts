@@ -35,7 +35,7 @@ import {
 } from "@aiwebsite/templates";
 
 import { buildAiEngine } from "../server/ai-engine";
-import { leadToFacts } from "../server/lead-facts";
+import { buildMapUrls, leadToFacts } from "../server/lead-facts";
 import { fillContentImages } from "../server/stock-fill";
 
 export type GeneratorResult<T = undefined> =
@@ -165,6 +165,9 @@ export async function generateWebsiteAction(
       tone,
       language: primaryLanguage,
     });
+    // Map links are computed from the lead's real coordinates/place_id, never
+    // left to the AI (which correctly leaves unknown location data blank).
+    Object.assign(primary.value.business, buildMapUrls(lead));
     // Stock auto-fill: demos never ship with empty image slots.
     const filled = await fillContentImages(supabase, primary.value, lead.category).catch(() => ({
       content: primary.value,
@@ -186,6 +189,7 @@ export async function generateWebsiteAction(
         tone,
         language: "hi",
       });
+      Object.assign(hindi.value.business, buildMapUrls(lead));
       await createSiteVersion(
         supabase,
         site.id,
@@ -399,6 +403,7 @@ function swapIdentity(content: SiteContent, from: LeadRow, to: LeadRow): SiteCon
     city: to.city ?? "",
     rating: to.google_rating,
     reviewCount: to.review_count,
+    ...buildMapUrls(to),
     socials: {
       instagram: to.instagram ?? "",
       facebook: to.facebook ?? "",

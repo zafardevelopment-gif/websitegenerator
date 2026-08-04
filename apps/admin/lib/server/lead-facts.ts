@@ -21,3 +21,31 @@ export function leadToFacts(lead: LeadRow): LeadFacts {
     notes: lead.notes,
   };
 }
+
+/**
+ * Google Maps links for the generated site — computed here, never by the AI
+ * (it's told to leave unknown fields blank rather than invent a location).
+ * Uses the free `maps.google.com/maps?...&output=embed` form, which needs no
+ * API key, unlike the official Maps Embed API.
+ */
+export function buildMapUrls(lead: LeadRow): { mapUrl: string; mapEmbedUrl: string } {
+  const hasCoords = lead.latitude != null && lead.longitude != null;
+  const query = hasCoords
+    ? `${lead.latitude},${lead.longitude}`
+    : lead.place_id
+      ? `place_id:${lead.place_id}`
+      : null;
+
+  if (!query) {
+    return { mapUrl: lead.google_maps_url ?? "", mapEmbedUrl: "" };
+  }
+
+  const mapUrl =
+    lead.google_maps_url ??
+    (hasCoords
+      ? `https://www.google.com/maps?q=${query}`
+      : `https://www.google.com/maps/place/?q=${query}`);
+  const mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=16&output=embed`;
+
+  return { mapUrl, mapEmbedUrl };
+}
