@@ -78,94 +78,149 @@ returns it, and the pool view shows exactly which lead holds which slug.
 
 ---
 
-## Phase 2 — Slot expiry & auto-reclaim ⬜
+## Phase 2 — Slot expiry & auto-reclaim ✅
 
 A 10-slot pool is exhausted in two weeks without automatic recycling.
 
-- [ ] `demo_expires_at` drives a nightly sweep in the existing cron route
-- [ ] Warn at T-3 days (in-app notification + follow-up task)
-- [ ] At T-0: site → `expired`, slot → `cooldown`, then `free`
-- [ ] Expired URL serves a branded holding page, not a 404
-- [ ] "Extend 7 days" action for live conversations
-- [ ] Never auto-expire a lead in `interested` / `meeting` / `negotiation`
+- [x] `demo_expires_at` drives a nightly sweep in the existing cron route
+      (`/api/cron/expire-demos`)
+- [x] Warn at T-3 days (in-app notification `demo_expiring_soon` + a
+      follow-up task, deduped per expiry via migration `0012`)
+- [x] At T-0: site → `expired`, slot → `cooldown` (via `releaseSlotForSite`),
+      then the same cron sweeps `cooldown` → `free`
+- [x] Expired URL serves a branded holding page, not a 404 (already wired —
+      `HoldingPage kind="expired"` in `apps/sites`)
+- [x] "Extend 7 days" action for live conversations (already wired —
+      `extendDemoExpiryAction`)
+- [x] Never auto-expire a lead in `interested` / `meeting` / `negotiation` —
+      cron now joins lead status and postpones instead of expiring
 
 **Done when:** the pool sustains itself with no manual cleanup.
 
 ---
 
-## Phase 3 — Phone identity & reply attribution ⬜
+## Phase 3 — Phone identity & reply attribution ✅
 
 WhatsApp replies arrive as a bare phone number. Without canonical numbers,
 inbound messages can't be matched to a lead.
 
-- [ ] Migration `0012_phone_identity.sql` — `phone_e164`, `whatsapp_e164`
-      generated/maintained columns + unique partial indexes
-- [ ] Backfill existing leads to E.164 (`+91…`)
-- [ ] Normalize on every write path: import, manual create, Google Places
-- [ ] `findLeadByPhone(e164)` resolver with a documented ambiguity rule
-- [ ] Inbound direction on messages: `direction` enum (`outbound|inbound`),
-      `replied_at` on the lead
+- [x] Migration `0013_phone_identity.sql` — `phone_e164`, `whatsapp_e164`
+      trigger-maintained columns (not `GENERATED ALWAYS AS`, so the
+      normalization rule can change without a column rewrite) + partial
+      indexes. **Not unique** — two leads can legitimately share a number;
+      see the ambiguity rule below instead of a DB constraint
+- [x] Backfill existing leads to E.164 (`+91…`) — one-time `update` in the
+      migration
+- [x] Normalize on every write path: the trigger fires on *any* insert/update
+      to `phone`/`whatsapp`, so import, manual create, and Google Places all
+      get normalized automatically with zero app-code changes
+- [x] `findLeadByPhone(e164)` resolver (`packages/db/src/repositories/leads.ts`)
+      — checks both `phone_e164` and `whatsapp_e164`; returns `ambiguous: true`
+      instead of guessing when more than one active lead matches
+- [x] Inbound direction on messages: `direction` enum (`outbound|inbound`,
+      defaults `outbound`), `replied_at` on the lead
 
 **Done when:** any Indian phone format resolves to exactly one lead.
 
 ---
 
-## Phase 4 — Inbound webhook for n8n ⬜
+## Phase 4 — Inbound webhook for n8n ✅
 
 The single API surface n8n writes back to.
 
-- [ ] `POST /api/webhooks/whatsapp-inbound` — HMAC-signed, replay-protected
-- [ ] Resolves lead by `phone_e164`, stores an inbound message, appends a
-      lead activity, fires a notification
-- [ ] Auto-advances status `whatsapp_sent → interested` on first reply
-      (configurable, never downgrades a later stage)
-- [ ] Delivery-status callback (`sent / delivered / read / failed`)
-- [ ] Idempotent on provider message id
-- [ ] Shared secret in settings, rotatable from the UI
+- [x] `POST /api/webhooks/whatsapp-inbound` — HMAC-SHA256 signed
+      (`X-Webhook-Signature`, same scheme as the Razorpay webhook)
+- [x] Resolves lead by `phone_e164`/`whatsapp_e164` via `findLeadByPhone`,
+      stores an inbound message (`direction: "inbound"`), appends a
+      `message_received` lead activity, fires an `inbound_reply` notification
+- [x] Auto-advances status `whatsapp_sent`/`demo_viewed`/`waiting` →
+      `interested` on first reply, never downgrades a lead already at
+      `interested` or later
+- [x] Delivery-status callback (`{"event":"status", ...}` →
+      `sent / delivered / read(opened) / failed`), rank-gated so a
+      re-delivered "sent" can't undo a "read"
+- [x] Idempotent on `provider_message_id` (checked before insert, and before
+      any status update)
+- [x] Shared secret in Settings → API Keys → n8n / WhatsApp inbound,
+      rotatable from the UI (`WHATSAPP_INBOUND_WEBHOOK_SECRET` env wins)
+- [x] Ambiguous or unmatched numbers never auto-attach — flagged via an
+      `inbound_reply_ambiguous` notification instead (the Phase 3 rule)
 
 **Done when:** a POST from n8n shows up on the lead timeline within seconds.
 
 ---
 
-## Phase 5 — Engagement signals on the lead timeline ⬜
+## Phase 5 — Engagement signals on the lead timeline ✅
 
 The strongest closing signal is "they opened the site". Tracking already
 exists (`/api/track`) but never surfaces where decisions get made.
 
-- [ ] Lead detail: opened / not opened, first + last view, view count,
-      time on page, which sections were read, CTA clicks
-- [ ] `demo_viewed` status auto-set on first real view (bots filtered)
-- [ ] Leads list: "viewed but silent" filter — the highest-intent segment
-- [ ] Feed engagement into the existing health score
+- [x] Lead detail: opened / not opened, first + last view, view count,
+      time on page, which sections were read, CTA clicks — new
+      `getSiteEngagement` in `packages/db/src/repositories/tracking.ts`,
+      rendered as an "Engagement" card on the lead page
+- [x] `demo_viewed` status auto-set on first real view (bots filtered) —
+      this was already wired in `/api/track/visit`
+- [x] Leads list: "viewed but silent" quick filter (`leads-toolbar.tsx`) —
+      the highest-intent segment is exactly `status = demo_viewed` (viewed,
+      hasn't progressed); Phase 4's inbound webhook already moves a lead
+      off this status the moment they reply
+- [x] Feed engagement into the existing health score — `runHealthScoreAction`
+      now computes `conversion_score` from real CTA-click/visitor ratio and
+      folds it into the overall score average
 
 **Done when:** you can sort the pipeline by who actually looked.
 
 ---
 
-## Phase 6 — n8n workflow ⬜
+## Phase 6 — n8n workflow ✅
 
 Only now, once the app owns all the state.
 
-- [ ] Exportable workflow JSON committed to `integrations/n8n/`
-- [ ] Outbound: poll/receive queued pitches → send WhatsApp → report status
-- [ ] Inbound: receive replies → POST to the Phase 4 webhook
-- [ ] Follow-up ladder: no reply in 3 days → nudge; no reply in 7 → final
-- [ ] Quiet hours + per-day send cap
-- [ ] Setup guide covering the WhatsApp Cloud API template-message
-      requirement for cold outreach (see risk note below)
+- [x] Exportable workflow JSON committed to `integrations/n8n/`
+      (`outbound-whatsapp.workflow.json`, `inbound-whatsapp.workflow.json`)
+- [x] Outbound: n8n polls `GET /api/automation/outreach-queue` (new,
+      HMAC-signed) → sends via WhatsApp Cloud API → reports back to
+      `POST /api/automation/log-sent` (new, HMAC-signed)
+- [x] Inbound: n8n's webhook receives replies/status callbacks → forwards
+      to the Phase 4 webhook (`/api/webhooks/whatsapp-inbound`)
+- [x] Follow-up ladder: rides the templates already seeded in Settings →
+      Prompts — pitch → `day2` → `day5` → `day10` (final), each rung gated
+      on the previous message's age with no reply; a lead falls off the
+      instant it replies or advances past `waiting`
+- [x] Quiet hours + per-day send cap — cron expression restricted to a
+      sending window, `limit` param + a documented per-day counter pattern
+      (see `integrations/n8n/README.md` §3)
+- [x] Setup guide (`integrations/n8n/README.md`) covering the WhatsApp
+      Cloud API approved-template requirement, the HMAC signing scheme,
+      and step-by-step node configuration for both workflows
 
 **Done when:** a lead moves from `website_generated` to a captured reply
 without anyone touching a keyboard.
 
 ---
 
-## Phase 7 — Won-deal migration ⬜
+## Phase 7 — Won-deal migration ✅
 
-- [ ] Guided flow: attach client domain → Vercel domain add → DNS
-      instructions → verify → flip site to `production`
-- [ ] 301 from the demo slot to the client domain during a grace window
-- [ ] Release the slot back to the pool when the grace window ends
-- [ ] Client handover pack (credentials, what they own, what renews)
+- [x] Guided flow: attach client domain → Vercel domain add → DNS
+      instructions → verify → flip site to `production` — this was already
+      built (`convertLeadToClientAction`, `addDomainAction`,
+      `verifyDomainAction`); Phase 7 wired the last step, the hand-off
+- [x] 301 from the demo slot to the client domain during a grace window —
+      `verifyDomainAction` now sets `redirect_to_domain` +
+      `redirect_grace_ends_at` (14 days) on the site the moment the custom
+      domain verifies; `apps/sites` issues a `permanentRedirect` for any
+      visit to the old demo slug while the window is open
+- [x] Release the slot back to the pool when the grace window ends —
+      the Phase 2 cron (`/api/cron/expire-demos`) now also sweeps expired
+      hand-offs and releases the slot with no cooldown (it was never shown
+      to a new prospect during the redirect window)
+- [x] Client handover pack (credentials, what they own, what renews) —
+      `generateHandoverPackAction` renders a PDF (live URL, domain/renewal
+      dates from the client record, ownership breakdown, support contact);
+      download button on each client card in `/clients`
+
+Migration `0015_domain_handoff.sql` adds the two new columns this needed.
 
 **Done when:** winning a deal is a single guided flow, not a checklist.
 

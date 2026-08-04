@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 
 import {
   buildFallbackContent,
@@ -93,6 +94,17 @@ export default async function TenantPage({ params }: TenantParams) {
   }
 
   const { site, agency } = bundle;
+
+  // Won-deal hand-off (Phase 7): the old demo link 301s to the client's
+  // own domain for a grace window instead of dying the moment the domain
+  // goes live — the nightly cron reclaims the slot once the window ends.
+  if (
+    site.redirect_to_domain &&
+    site.redirect_grace_ends_at &&
+    new Date(site.redirect_grace_ends_at).getTime() > Date.now()
+  ) {
+    permanentRedirect(`https://${site.redirect_to_domain}`);
+  }
 
   if (site.status === "draft" || site.status === "paused") {
     return <HoldingPage kind="unpublished" businessName={site.name} />;

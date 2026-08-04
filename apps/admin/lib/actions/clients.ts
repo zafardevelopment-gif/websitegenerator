@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { createServerSupabase } from "@aiwebsite/db/server";
+import { getAgencyProfile } from "@aiwebsite/db/settings";
 import { createClient, getClientByLead, listClients, updateClient } from "@aiwebsite/db/repositories/clients";
+import { listDomainsBySite } from "@aiwebsite/db/repositories/domains";
 import { getLead, logLeadActivity, setLeadStatus } from "@aiwebsite/db/repositories/leads";
-import { listSites, updateSite } from "@aiwebsite/db/repositories/sites";
+import { getSite, listSites, updateSite } from "@aiwebsite/db/repositories/sites";
 import type { ClientRow } from "@aiwebsite/db/types";
 
 import { revalidateSiteTag } from "../server/renderer";
+import { demoUrl } from "../urls";
 
 // Keep in sync with REQUIREMENTS_CHECKLIST_ITEMS keys in "../constants/clients".
 // Duplicated locally (rather than imported) because a "use server" file can only
@@ -158,6 +161,62 @@ export async function setChecklistItemAction(input: unknown): Promise<ClientResu
     await updateClient(supabase, client.id, { onboarding_checklist: checklist });
     revalidatePath("/clients");
     return { ok: true, message: "Checklist updated." };
+  } catch (e) {
+    return { ok: false, error: friendly(e) };
+  }
+}
+
+// ── Handover pack (Phase 7) ──────────────────────────────────────────
+
+const handoverSchema = z.object({ clientId: z.string().uuid() });
+
+export async function generateHandoverPackAction(
+  input: unknown
+): Promise<ClientResult<{ base64: string; fileName: string }>> {
+  const parsed = handoverSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request" };
+
+  try {
+    const { supabase } = await requireUser();
+    const clients = await listClients(supabase);
+    const client = clients.find((c) => c.id === parsed.data.clientId);
+    if (!client) return { ok: false, error: "Client not found" };
+    if (!client.site_id) return { ok: false, error: "This client has no linked site." };
+
+    const site = await getSite(supabase, client.site_id);
+    if (!site) return { ok: false, error: "Site not found" };
+
+    const domains = await listDomainsBySite(supabase, site.id);
+    const activeDomain = domains.find((d) => d.status === "active");
+    const agency = await getAgencyProfile(supabase);
+
+    const { renderHandoverPdf } = await import("../server/handover-pdf");
+    const buffer = await renderHandoverPdf({
+      agency: {
+        name: agency.name || "AIVEXA LLP",
+        whatsapp: agency.whatsapp,
+        email: agency.email,
+        address: agency.address,
+        gstNo: agency.gst_no,
+      },
+      businessName: client.business_name,
+      liveUrl: activeDomain ? `https://${activeDomain.domain}` : demoUrl(site.slug),
+      domainStatus: activeDomain ? "custom" : "demo_subdomain",
+      domainExpiry: client.domain_expiry,
+      renewalDate: client.renewal_date,
+      hostingNotes: client.hosting_notes,
+      maintenanceNotes: client.maintenance_notes,
+      convertedAt: site.converted_at,
+    });
+
+    return {
+      ok: true,
+      message: "Handover pack generated.",
+      data: {
+        base64: buffer.toString("base64"),
+        fileName: `${client.business_name.replace(/[^a-z0-9]+/gi, "-")}-handover-pack.pdf`,
+      },
+    };
   } catch (e) {
     return { ok: false, error: friendly(e) };
   }

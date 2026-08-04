@@ -92,6 +92,19 @@ const GROUPS: GroupDef[] = [
     phase: "15",
     fields: [{ name: "google_places_api_key", label: "Google Places API key", secret: true }],
   },
+  {
+    title: "n8n / WhatsApp inbound",
+    description:
+      "HMAC-SHA256 shared secret n8n signs its POST body with when it forwards a WhatsApp reply to /api/webhooks/whatsapp-inbound. Rotate any time — update it in n8n at the same time.",
+    phase: "4",
+    fields: [
+      {
+        name: "whatsapp_inbound_webhook_secret",
+        label: "Inbound webhook secret",
+        secret: true,
+      },
+    ],
+  },
 ];
 
 const EMPTY_VALUES: ApiKeysInput = {
@@ -107,6 +120,7 @@ const EMPTY_VALUES: ApiKeysInput = {
   razorpay_key_secret: "",
   razorpay_webhook_secret: "",
   google_places_api_key: "",
+  whatsapp_inbound_webhook_secret: "",
 };
 
 export function ApiKeysForm({

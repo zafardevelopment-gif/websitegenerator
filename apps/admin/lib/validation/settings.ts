@@ -36,5 +36,6 @@ export const apiKeysSchema = z.object({
   razorpay_key_secret: z.string().trim().max(300),
   razorpay_webhook_secret: z.string().trim().max(300),
   google_places_api_key: z.string().trim().max(300),
+  whatsapp_inbound_webhook_secret: z.string().trim().max(300),
 });
 export type ApiKeysInput = z.infer<typeof apiKeysSchema>;

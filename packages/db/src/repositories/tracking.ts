@@ -141,6 +141,71 @@ export async function getSiteVisitStats(
   };
 }
 
+export interface SiteEngagementSummary {
+  viewed: boolean;
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  uniqueVisitors: number;
+  avgDurationSec: number;
+  /** Section keys ranked by view count, most-read first. */
+  topSections: { section: string; count: number }[];
+  ctaClicks: { call: number; whatsapp: number; appointment: number };
+}
+
+/**
+ * Full engagement picture for one site — powers the lead-detail "did they
+ * actually look?" card (Phase 5). Bot/preview traffic (`is_internal`) is
+ * excluded throughout.
+ */
+export async function getSiteEngagement(db: DbClient, siteId: string): Promise<SiteEngagementSummary> {
+  const [{ data: visits, error: visitsError }, { data: events, error: eventsError }] = await Promise.all([
+    db
+      .from("aiwebsite_site_visits")
+      .select("visitor_key, duration_sec, created_at")
+      .eq("site_id", siteId)
+      .eq("is_internal", false)
+      .limit(20000),
+    db
+      .from("aiwebsite_site_events")
+      .select("event_type, section")
+      .eq("site_id", siteId)
+      .limit(20000),
+  ]);
+  if (visitsError) fail("Failed to load site engagement (visits)", visitsError);
+  if (eventsError) fail("Failed to load site engagement (events)", eventsError);
+
+  const visitRows = visits ?? [];
+  const uniqueVisitors = new Set(visitRows.map((v) => v.visitor_key)).size;
+  const totalDuration = visitRows.reduce((sum, v) => sum + (v.duration_sec ?? 0), 0);
+  const timestamps = visitRows.map((v) => v.created_at).sort();
+
+  const sectionCounts = new Map<string, number>();
+  const ctaClicks = { call: 0, whatsapp: 0, appointment: 0 };
+  for (const event of events ?? []) {
+    if (event.event_type === "section_view" && event.section) {
+      sectionCounts.set(event.section, (sectionCounts.get(event.section) ?? 0) + 1);
+    }
+    if (event.event_type === "cta_call") ctaClicks.call += 1;
+    if (event.event_type === "cta_whatsapp") ctaClicks.whatsapp += 1;
+    if (event.event_type === "cta_appointment") ctaClicks.appointment += 1;
+  }
+
+  return {
+    viewed: visitRows.length > 0,
+    firstViewedAt: timestamps[0] ?? null,
+    lastViewedAt: timestamps[timestamps.length - 1] ?? null,
+    viewCount: visitRows.length,
+    uniqueVisitors,
+    avgDurationSec: visitRows.length > 0 ? Math.round(totalDuration / visitRows.length) : 0,
+    topSections: Array.from(sectionCounts.entries())
+      .map(([section, count]) => ({ section, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5),
+    ctaClicks,
+  };
+}
+
 export async function listRecentVisits(
   db: DbClient,
   siteId: string,

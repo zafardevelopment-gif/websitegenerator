@@ -33,6 +33,7 @@ export type ActivityType =
   | "status_change"
   | "note"
   | "message_sent"
+  | "message_received"
   | "demo_view"
   | "follow_up"
   | "import"
@@ -71,6 +72,7 @@ export type FormType = "contact" | "appointment";
 export type Channel = "whatsapp" | "email";
 export type MessageStatus = "draft" | "sent" | "delivered" | "read" | "opened" | "failed";
 export type FollowUpStatus = "pending" | "done" | "snoozed" | "cancelled";
+export type MessageDirection = "outbound" | "inbound";
 export type QuotationStatus = "draft" | "sent" | "accepted" | "rejected" | "expired";
 export type PaymentStatus = "created" | "pending" | "paid" | "failed" | "refunded" | "cancelled";
 export type DomainStatus = "pending_dns" | "verifying" | "active" | "failed" | "removed";
@@ -80,7 +82,10 @@ export type NotificationType =
   | "demo_cta_click"
   | "form_submission"
   | "daily_digest"
-  | "renewal_reminder";
+  | "renewal_reminder"
+  | "demo_expiring_soon"
+  | "inbound_reply"
+  | "inbound_reply_ambiguous";
 
 // ── Row interfaces ──────────────────────────────────────────────────
 
@@ -161,6 +166,12 @@ export type LeadRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  /** Trigger-maintained E.164 form of `phone` — see migration 0013. */
+  phone_e164: string | null;
+  /** Trigger-maintained E.164 form of `whatsapp` — see migration 0013. */
+  whatsapp_e164: string | null;
+  /** First inbound WhatsApp/email reply timestamp. */
+  replied_at: string | null;
 }
 
 export type LeadActivityRow = {
@@ -210,6 +221,10 @@ export type SiteRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  /** Set once a won deal's custom domain verifies — see migration 0015. */
+  redirect_to_domain: string | null;
+  /** After this passes, the cron releases the demo slot back to the pool. */
+  redirect_grace_ends_at: string | null;
 }
 
 export type DemoSlotRow = {
@@ -352,6 +367,7 @@ export type MessageRow = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  direction: MessageDirection;
 }
 
 export type FollowUpRow = {
@@ -594,7 +610,7 @@ export interface Database {
       >;
       aiwebsite_messages: Tbl<
         MessageRow,
-        "id" | "status" | "open_token" | "created_at" | "updated_at"
+        "id" | "status" | "open_token" | "created_at" | "updated_at" | "direction"
       >;
       aiwebsite_follow_ups: Tbl<FollowUpRow, "id" | "status" | "created_at" | "updated_at">;
       aiwebsite_quotations: Tbl<

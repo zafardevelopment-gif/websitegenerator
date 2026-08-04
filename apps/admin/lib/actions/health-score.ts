@@ -9,6 +9,7 @@ import { getAgencyProfile } from "@aiwebsite/db/settings";
 import { createHealthScore, getLatestHealthScore, listHealthScores } from "@aiwebsite/db/repositories/health-scores";
 import { getLead } from "@aiwebsite/db/repositories/leads";
 import { getSite } from "@aiwebsite/db/repositories/sites";
+import { getSiteVisitStats } from "@aiwebsite/db/repositories/tracking";
 import type { HealthScoreRow, Json } from "@aiwebsite/db/types";
 
 import { buildAiEngine } from "../server/ai-engine";
@@ -60,6 +61,15 @@ export async function runHealthScoreAction(input: unknown): Promise<HealthScoreR
       };
     }
 
+    // Real visitor behavior (Phase 5) feeds the conversion component
+    // instead of leaving it unset — a demo with real CTA engagement should
+    // score higher than one nobody has touched, regardless of PageSpeed.
+    const visitStats = await getSiteVisitStats(supabase, site.id).catch(() => null);
+    const conversionScore =
+      visitStats && visitStats.uniqueVisitors > 0
+        ? Math.max(0, Math.min(100, Math.round((visitStats.ctaClicks / visitStats.uniqueVisitors) * 100)))
+        : null;
+
     const scores = {
       seo: pageSpeed.mobile.seo,
       performance: pageSpeed.mobile.performance,
@@ -67,6 +77,7 @@ export async function runHealthScoreAction(input: unknown): Promise<HealthScoreR
       bestPractices: pageSpeed.mobile.bestPractices,
       mobile: pageSpeed.mobile.performance,
       desktop: pageSpeed.desktop.performance,
+      ...(conversionScore !== null ? { conversion: conversionScore } : {}),
     };
 
     const { engine } = await buildAiEngine({
@@ -92,6 +103,7 @@ export async function runHealthScoreAction(input: unknown): Promise<HealthScoreR
       best_practices_score: scores.bestPractices,
       mobile_score: scores.mobile,
       desktop_score: scores.desktop,
+      conversion_score: conversionScore,
       overall_score: overall,
       ai_audit: (audit ?? {}) as unknown as Json,
       created_by: user.id,

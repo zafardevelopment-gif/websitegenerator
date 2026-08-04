@@ -12,7 +12,8 @@ import {
   setDomainStatus,
   updateDomain,
 } from "@aiwebsite/db/repositories/domains";
-import { getSite } from "@aiwebsite/db/repositories/sites";
+import { getSite, updateSite } from "@aiwebsite/db/repositories/sites";
+import { getSlotForSite } from "@aiwebsite/db/repositories/demo-slots";
 import type { DomainRow, Json } from "@aiwebsite/db/types";
 
 import {
@@ -114,7 +115,23 @@ export async function verifyDomainAction(
     if (result.verified) {
       await setDomainStatus(supabase, parsed.data.domainId, "active");
       const site = await getSite(supabase, parsed.data.siteId);
-      if (site) await revalidateSiteTag(site.slug);
+      if (site) {
+        await revalidateSiteTag(site.slug);
+
+        // Won-deal hand-off (Phase 7): if this site is still parked on a
+        // pooled demo slug, don't let it go dead the moment the new domain
+        // is live — 301 the old link for a grace window, then the nightly
+        // cron reclaims the slot. A site already on its own permanent slug
+        // (production, never demo) has nothing to hand off.
+        const slot = await getSlotForSite(supabase, site.id);
+        if (slot) {
+          const graceEndsAt = new Date(Date.now() + 14 * 86400_000).toISOString();
+          await updateSite(supabase, site.id, {
+            redirect_to_domain: parsed.data.domain,
+            redirect_grace_ends_at: graceEndsAt,
+          });
+        }
+      }
       await revalidateSiteTag(parsed.data.domain);
     } else {
       await updateDomain(supabase, parsed.data.domainId, {

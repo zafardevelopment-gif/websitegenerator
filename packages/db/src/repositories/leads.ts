@@ -243,6 +243,57 @@ export async function getDedupeKeys(
   return { phones, placeIds };
 }
 
+/**
+ * JS mirror of the DB trigger `aiwebsite_normalize_phone_e164` (migration
+ * 0013) — same Indian-numbers-only rule, used for lookups where round-
+ * tripping through Postgres just to normalize a string would be wasteful
+ * (e.g. the Phase 4 inbound webhook, which needs the E.164 form before it
+ * can query). Keep the two in sync if the rule ever changes.
+ */
+export function normalizePhoneE164(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+  if (digits.length >= 11 && digits.length <= 15) return `+${digits}`;
+  return null;
+}
+
+export interface PhoneLookupResult {
+  lead: LeadRow | null;
+  /** True when more than one active lead shares this number — caller must
+   * not auto-attach; flag the inbound message for manual review instead. */
+  ambiguous: boolean;
+  matches: LeadRow[];
+}
+
+/**
+ * Resolve an inbound WhatsApp/phone reply to exactly one lead. Checks both
+ * `phone_e164` and `whatsapp_e164` since a business may reply from either
+ * number. Never auto-attaches when more than one active lead matches —
+ * see the Phase 3 ambiguity rule in docs/ROADMAP.md.
+ */
+export async function findLeadByPhone(
+  db: DbClient,
+  e164: string
+): Promise<PhoneLookupResult> {
+  const { data, error } = await db
+    .from("aiwebsite_leads")
+    .select("*")
+    .or(`phone_e164.eq.${e164},whatsapp_e164.eq.${e164}`)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (error) fail("Failed to resolve lead by phone", error);
+
+  const matches = data ?? [];
+  if (matches.length === 0) return { lead: null, ambiguous: false, matches: [] };
+  if (matches.length === 1) return { lead: matches[0] ?? null, ambiguous: false, matches };
+  return { lead: null, ambiguous: true, matches };
+}
+
 /** Status → count map for funnel/dashboard widgets. */
 export async function countLeadsByStatus(db: DbClient): Promise<Record<LeadStatus, number>> {
   const { data, error } = await db

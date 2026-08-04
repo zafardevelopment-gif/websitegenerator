@@ -42,6 +42,20 @@ export async function listMessagesByLead(
   return data ?? [];
 }
 
+/** Idempotency check for the inbound webhook and delivery-status callbacks. */
+export async function getMessageByExternalId(
+  db: DbClient,
+  externalId: string
+): Promise<MessageRow | null> {
+  const { data, error } = await db
+    .from("aiwebsite_messages")
+    .select("*")
+    .eq("external_id", externalId)
+    .maybeSingle();
+  if (error) fail("Failed to look up message by external id", error);
+  return data;
+}
+
 /** Used by the email open-tracking pixel (service-role, no auth context). */
 export async function getMessageByOpenToken(
   db: DbClient,

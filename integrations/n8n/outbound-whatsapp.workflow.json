@@ -1,0 +1,140 @@
+{
+  "name": "AIVEXA — Outbound WhatsApp pitch ladder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 10-19 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 30 min, 10am-7pm",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.N8N_WEBHOOK_SECRET;\nconst qs = 'limit=20';\nconst signature = crypto.createHmac('sha256', secret).update(qs).digest('hex');\nreturn [{ json: { qs, signature } }];"
+      },
+      "id": "sign-queue-request",
+      "name": "Sign queue GET",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.ADMIN_BASE_URL}}/api/automation/outreach-queue?{{$json.qs}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Signature", "value": "={{$json.signature}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-queue",
+      "name": "GET outreach-queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-items",
+      "name": "Split queue items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait-between-sends",
+      "name": "Wait (avoid burst)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.WHATSAPP_CLOUD_API_URL}}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$env.WHATSAPP_CLOUD_API_TOKEN}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $json.phone, type: 'template', template: { name: $json.templateKey, language: { code: 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: $json.text }] }] } } }}",
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Send via WhatsApp Cloud API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "notes": "Requires an APPROVED Meta template — see README §1 before enabling this node.",
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.N8N_WEBHOOK_SECRET;\nconst body = JSON.stringify({\n  lead_id: $('Split queue items').item.json.leadId,\n  template_key: $('Split queue items').item.json.templateKey,\n  body: $('Split queue items').item.json.text,\n  provider_message_id: $json.messages ? $json.messages[0].id : undefined,\n});\nconst signature = crypto.createHmac('sha256', secret).update(body).digest('hex');\nreturn [{ json: { body, signature } }];"
+      },
+      "id": "sign-log-sent",
+      "name": "Sign log-sent POST",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ADMIN_BASE_URL}}/api/automation/log-sent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Signature", "value": "={{$json.signature}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.body}}",
+        "options": {}
+      },
+      "id": "log-sent",
+      "name": "POST log-sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Every 30 min, 10am-7pm": { "main": [[{ "node": "Sign queue GET", "type": "main", "index": 0 }]] },
+    "Sign queue GET": { "main": [[{ "node": "GET outreach-queue", "type": "main", "index": 0 }]] },
+    "GET outreach-queue": { "main": [[{ "node": "Split queue items", "type": "main", "index": 0 }]] },
+    "Split queue items": { "main": [[{ "node": "Wait (avoid burst)", "type": "main", "index": 0 }]] },
+    "Wait (avoid burst)": { "main": [[{ "node": "Send via WhatsApp Cloud API", "type": "main", "index": 0 }]] },
+    "Send via WhatsApp Cloud API": { "main": [[{ "node": "Sign log-sent POST", "type": "main", "index": 0 }]] },
+    "Sign log-sent POST": { "main": [[{ "node": "POST log-sent", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Starter workflow — open every node before enabling. See integrations/n8n/README.md."
+  }
+}

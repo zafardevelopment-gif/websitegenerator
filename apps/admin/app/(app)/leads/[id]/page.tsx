@@ -6,9 +6,11 @@ import {
   Calendar,
   CalendarClock,
   CreditCard,
+  Eye,
   FileText,
   Globe,
   Import,
+  Inbox,
   Mail,
   MapPin,
   MessageSquare,
@@ -28,6 +30,7 @@ import { listMessageTemplates } from "@aiwebsite/db/repositories/message-templat
 import { listMessagesByLead } from "@aiwebsite/db/repositories/messages";
 import { listQuotationsByLead } from "@aiwebsite/db/repositories/quotations";
 import { listSites } from "@aiwebsite/db/repositories/sites";
+import { getSiteEngagement, type SiteEngagementSummary } from "@aiwebsite/db/repositories/tracking";
 import type { ActivityType } from "@aiwebsite/db/types";
 import {
   Badge,
@@ -55,6 +58,7 @@ const ACTIVITY_ICONS: Record<ActivityType, LucideIcon> = {
   status_change: Workflow,
   note: StickyNote,
   message_sent: MessageSquare,
+  message_received: Inbox,
   demo_view: Zap,
   follow_up: CalendarClock,
   import: Import,
@@ -93,6 +97,13 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     ]);
   const pendingFollowUps = followUps.filter((f) => f.status === "pending" || f.status === "snoozed");
   const services = Array.isArray(lead.services) ? (lead.services as string[]) : [];
+
+  // Engagement card reads off whichever site is currently fronting this
+  // lead — live/converted first, else the most recent draft.
+  const primarySite = sites.find((s) => s.status === "live" || s.status === "converted") ?? sites[0] ?? null;
+  const engagement: SiteEngagementSummary | null = primarySite
+    ? await getSiteEngagement(supabase, primarySite.id)
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -272,6 +283,61 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               })}
             </CardContent>
           </Card>
+
+          {engagement && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  Engagement
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y">
+                <InfoRow
+                  label="Demo viewed"
+                  value={
+                    engagement.viewed ? (
+                      <Badge variant="success">Yes</Badge>
+                    ) : (
+                      <Badge variant="outline">Not yet</Badge>
+                    )
+                  }
+                />
+                {engagement.viewed && (
+                  <>
+                    <InfoRow
+                      label="First / last view"
+                      value={`${formatRelative(engagement.firstViewedAt)} → ${formatRelative(
+                        engagement.lastViewedAt
+                      )}`}
+                    />
+                    <InfoRow
+                      label="Views"
+                      value={`${engagement.viewCount} (${engagement.uniqueVisitors} unique)`}
+                    />
+                    <InfoRow
+                      label="Avg. time on page"
+                      value={
+                        engagement.avgDurationSec > 0 ? `${engagement.avgDurationSec}s` : "—"
+                      }
+                    />
+                    <InfoRow
+                      label="Most-read sections"
+                      value={
+                        engagement.topSections.length > 0
+                          ? engagement.topSections.map((s) => s.section).join(", ")
+                          : "—"
+                      }
+                    />
+                    <InfoRow
+                      label="CTA clicks"
+                      value={`Call ${engagement.ctaClicks.call} · WhatsApp ${engagement.ctaClicks.whatsapp} · Appointment ${engagement.ctaClicks.appointment}`}
+                    />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <OutreachPanel
             leadId={lead.id}

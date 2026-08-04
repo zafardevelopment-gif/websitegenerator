@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Bookmark, BookmarkPlus, Search, Trash2, X } from "lucide-react";
+import { Bookmark, BookmarkPlus, Eye, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BUSINESS_CATEGORIES } from "@aiwebsite/config";
@@ -156,6 +156,18 @@ export function LeadsToolbar() {
           </option>
         ))}
       </NativeSelect>
+
+      <Button
+        variant={searchParams.get("status") === "demo_viewed" ? "secondary" : "outline"}
+        size="sm"
+        title="Viewed the demo but hasn't replied yet — the highest-intent segment"
+        onClick={() =>
+          setParam("status", searchParams.get("status") === "demo_viewed" ? null : "demo_viewed")
+        }
+      >
+        <Eye />
+        Viewed but silent
+      </Button>
 
       {hasFilters && (
         <Button variant="ghost" size="sm" onClick={() => router.push(pathname)}>

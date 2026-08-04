@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { ClientRow, DomainRow } from "@aiwebsite/db/types";
@@ -19,9 +19,48 @@ import {
 } from "@aiwebsite/ui";
 
 import { addDomainAction, removeDomainAction, verifyDomainAction } from "@/lib/actions/domains";
-import { setChecklistItemAction, updateClientRecordAction } from "@/lib/actions/clients";
+import {
+  generateHandoverPackAction,
+  setChecklistItemAction,
+  updateClientRecordAction,
+} from "@/lib/actions/clients";
 import { REQUIREMENTS_CHECKLIST_ITEMS } from "@/lib/constants/clients";
 import { formatDate } from "@/lib/format";
+
+function downloadBase64Pdf(base64: string, fileName: string) {
+  const bytes = atob(base64);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
+  const blob = new Blob([array], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function HandoverPackButton({ clientId }: { clientId: string }) {
+  const [pending, startTransition] = React.useTransition();
+
+  function download() {
+    startTransition(async () => {
+      const result = await generateHandoverPackAction({ clientId });
+      if (result.ok && result.data) {
+        downloadBase64Pdf(result.data.base64, result.data.fileName);
+      } else if (!result.ok) {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  return (
+    <Button variant="outline" size="sm" onClick={download} disabled={pending}>
+      {pending ? <Loader2 className="animate-spin" /> : <Download />}
+      Handover pack
+    </Button>
+  );
+}
 
 const DOMAIN_STATUS_VARIANT: Record<string, "secondary" | "success" | "destructive" | "outline"> = {
   pending_dns: "secondary",
@@ -274,6 +313,7 @@ export function ClientsManager({
               />
             )}
             <RecordBlock client={client} />
+            <HandoverPackButton clientId={client.id} />
           </CardContent>
         </Card>
       ))}

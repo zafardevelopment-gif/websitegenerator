@@ -3,7 +3,17 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Calendar, Check, MessageCircle, Newspaper, Send, Zap } from "lucide-react";
+import {
+  Bell,
+  Calendar,
+  Check,
+  Clock,
+  MessageCircle,
+  Newspaper,
+  Send,
+  ShieldAlert,
+  Zap,
+} from "lucide-react";
 
 import type { NotificationRow, NotificationType } from "@aiwebsite/db/types";
 import {
@@ -33,6 +43,9 @@ const ICONS: Record<NotificationType, typeof Zap> = {
   form_submission: Send,
   daily_digest: Newspaper,
   renewal_reminder: Calendar,
+  demo_expiring_soon: Clock,
+  inbound_reply: MessageCircle,
+  inbound_reply_ambiguous: ShieldAlert,
 };
 
 export function NotificationsBell() {

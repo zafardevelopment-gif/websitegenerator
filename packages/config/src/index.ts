@@ -110,6 +110,8 @@ export const SETTING_KEYS = {
   razorpayWebhookSecret: "razorpay_webhook_secret",
   pagespeedApiKey: "pagespeed_api_key",
   googlePlacesApiKey: "google_places_api_key",
+  // n8n / WhatsApp inbound (Phase 4)
+  whatsappInboundWebhookSecret: "whatsapp_inbound_webhook_secret",
 } as const;
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 
@@ -125,6 +127,7 @@ export const SECRET_SETTING_KEYS: readonly SettingKey[] = [
   SETTING_KEYS.razorpayWebhookSecret,
   SETTING_KEYS.pagespeedApiKey,
   SETTING_KEYS.googlePlacesApiKey,
+  SETTING_KEYS.whatsappInboundWebhookSecret,
 ] as const;
 
 export function isSecretSettingKey(key: SettingKey): boolean {
