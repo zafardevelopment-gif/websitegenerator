@@ -1,0 +1,30 @@
+{
+  "name": "aiwebsite",
+  "private": true,
+  "description": "Instant Business Website AI — internal platform for AIVEXA LLP",
+  "packageManager": "npm@11.9.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:admin": "turbo dev --filter=@aiwebsite/admin",
+    "dev:sites": "turbo dev --filter=@aiwebsite/sites",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,css}\"",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

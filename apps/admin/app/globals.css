@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@aiwebsite/ui/tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Scan the shared UI package for class names. */
+@source "../../../packages/ui/src";

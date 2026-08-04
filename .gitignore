@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# turbo
+.turbo/
+
+# builds
+dist/
+build/
+
+# env — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+*.tsbuildinfo
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# playwright
+/playwright-report/
+/test-results/
+/e2e/.auth/
+
+# Local static design previews (generated)
+design-preview/

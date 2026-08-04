@@ -1,0 +1,392 @@
+@import "tailwindcss";
+
+/* Template components live in the shared package. */
+@source "../../../packages/templates/src";
+
+/*
+ * Site-scoped design tokens. Each tenant page sets the --site-* variables
+ * from its resolved branding (packages/templates/src/branding.ts); these
+ * mappings turn them into Tailwind utilities (bg-brand, text-ink, …).
+ */
+@theme inline {
+  --color-brand: var(--site-primary, #4f46e5);
+  --color-brand-foreground: var(--site-primary-foreground, #ffffff);
+  --color-brand-secondary: var(--site-secondary, #312e81);
+  --color-brand-accent: var(--site-accent, #f59e0b);
+  --color-site: var(--site-background, #fafaf9);
+  --color-surface: var(--site-surface, #ffffff);
+  --color-ink: var(--site-ink, #1c1917);
+  --color-ink-muted: var(--site-muted, #57534e);
+  --color-hairline: var(--site-hairline, rgb(0 0 0 / 0.08));
+  --font-heading: var(--site-font-heading, ui-sans-serif, sans-serif);
+  --font-body: var(--site-font-body, ui-sans-serif, sans-serif);
+
+  --radius-card: var(--site-radius, 1.5rem);
+
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.16);
+  --shadow-float: 0 2px 4px rgb(0 0 0 / 0.04), 0 24px 64px -24px rgb(0 0 0 / 0.28);
+  --shadow-glow: 0 20px 60px -20px var(--site-primary);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PREMIUM SITE LAYER
+   Typography, motion, glass, gradient mesh and texture primitives shared
+   by every generated template (packages/templates/src/components).
+   All server-rendered: zero client JS. Motion uses CSS scroll-driven
+   animations where supported and degrades to static content elsewhere.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Typography ─────────────────────────────────────────────────────── */
+
+.site-root {
+  --site-lede: clamp(1.0625rem, 0.95rem + 0.5vw, 1.25rem);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.display {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  font-size: clamp(2.5rem, 1.4rem + 4.6vw, 5.25rem);
+}
+
+.display-sm {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  font-size: clamp(1.875rem, 1.25rem + 2.4vw, 3.25rem);
+}
+
+.lede {
+  font-size: var(--site-lede);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Surfaces: glass, hairline, gradient border ─────────────────────── */
+
+.glass {
+  background: color-mix(in srgb, var(--site-surface) 72%, transparent);
+  backdrop-filter: saturate(1.8) blur(20px);
+  -webkit-backdrop-filter: saturate(1.8) blur(20px);
+}
+
+.glass-dark {
+  background: color-mix(in srgb, #0b0b0f 62%, transparent);
+  backdrop-filter: saturate(1.6) blur(20px);
+  -webkit-backdrop-filter: saturate(1.6) blur(20px);
+}
+
+/* 1px gradient outline that survives rounded corners */
+.edge {
+  position: relative;
+}
+.edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--site-primary) 45%, transparent),
+    transparent 42%,
+    transparent 62%,
+    color-mix(in srgb, var(--site-accent) 32%, transparent)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+.edge:hover::after {
+  opacity: 1;
+}
+
+/* ── Backdrops: aurora mesh, grid, grain, spotlight ─────────────────── */
+
+.aurora {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 130%;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 46% at 18% 12%, color-mix(in srgb, var(--site-primary) 55%, transparent) 0%, transparent 68%),
+    radial-gradient(38% 44% at 82% 8%, color-mix(in srgb, var(--site-accent) 48%, transparent) 0%, transparent 66%),
+    radial-gradient(52% 50% at 60% 66%, color-mix(in srgb, var(--site-secondary) 42%, transparent) 0%, transparent 70%);
+  filter: blur(28px) saturate(1.15);
+  opacity: 0.5;
+  animation: site-drift 22s ease-in-out infinite alternate;
+}
+
+.aurora-soft {
+  opacity: 0.28;
+}
+
+.grid-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--site-ink) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--site-ink) 8%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(80% 65% at 50% 30%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(80% 65% at 50% 30%, #000 0%, transparent 78%);
+  opacity: 0.6;
+}
+
+.grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.055;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.scrim {
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.88) 0%,
+    rgb(0 0 0 / 0.55) 38%,
+    rgb(0 0 0 / 0.15) 70%,
+    rgb(0 0 0 / 0.35) 100%
+  );
+}
+
+.brand-wash {
+  background:
+    radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--site-primary) 100%, transparent) 0%, transparent 60%),
+    radial-gradient(120% 100% at 100% 100%, color-mix(in srgb, var(--site-accent) 85%, transparent) 0%, transparent 58%),
+    linear-gradient(135deg, var(--site-secondary), var(--site-primary));
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────── */
+
+@keyframes site-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes site-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(34px) scale(0.985);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes site-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.12);
+  }
+}
+
+@keyframes site-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes site-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(37 211 102 / 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgb(37 211 102 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(37 211 102 / 0);
+  }
+}
+
+/* Entrance animation on page load (hero only — above the fold). */
+.rise {
+  animation: site-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
+ * Scroll-linked reveal. Progressive enhancement: without scroll-driven
+ * animation support the element simply renders in its final state.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: site-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 26%;
+    }
+  }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: site-marquee 42s linear infinite;
+}
+
+.marquee-mask {
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.pulse-ring {
+  animation: site-pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.lift {
+  transition:
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lift:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-float);
+}
+
+.zoomable {
+  overflow: hidden;
+}
+.zoomable img {
+  transition: transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zoomable:hover img {
+  transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .reveal,
+  .aurora,
+  .marquee-track,
+  .pulse-ring {
+    animation: none !important;
+  }
+  .lift:hover,
+  .zoomable:hover img {
+    transform: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── Details / accordion polish ─────────────────────────────────────── */
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq summary {
+  list-style: none;
+}
+
+/* ── Holding / status pages (base domain, unpublished, expired) ────── */
+
+.holding-body {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  background: #fafafa;
+  color: #18181b;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .holding-body {
+    background: #101012;
+    color: #fafafa;
+  }
+}
+
+.holding-card {
+  max-width: 26rem;
+  margin: 1rem;
+  padding: 2.5rem 2rem;
+  background: light-dark(#ffffff, #18181b);
+  border: 1px solid light-dark(#e4e4e7, #27272a);
+  border-radius: 1rem;
+  text-align: center;
+}
+
+.holding-card .brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: light-dark(#6d28d9, #8b5cf6);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+}
+
+.holding-card h1 {
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.holding-card p {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: light-dark(#71717a, #a1a1aa);
+  line-height: 1.6;
+}
+
+.holding-card .slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: inherit;
+  background: light-dark(#fafafa, #101012);
+  border: 1px solid light-dark(#e4e4e7, #27272a);
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.5rem;
+}

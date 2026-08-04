@@ -1,0 +1,18 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+/** Initials for avatar/logo fallbacks: "Smile Dental Care" → "SD". */
+export function initials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => (w[0] ?? "").toUpperCase())
+      .join("") || "?"
+  );
+}
