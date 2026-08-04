@@ -34,8 +34,25 @@ import {
 } from "lucide-react";
 
 import { brandingStyle, googleFontsHref, type ResolvedBranding } from "../branding";
+import { GalleryGrid } from "./gallery-lightbox";
+import { HeroCarousel } from "./hero-carousel";
 import { optimizeImage } from "../media";
 import type { SiteContent } from "../schema";
+
+/** Combines hero.image + gallery.images into a deduped list for the hero carousel. */
+function heroCarouselImages(
+  hero: { url: string; alt: string } | null,
+  gallery: { url: string; alt: string }[]
+): { url: string; alt: string }[] {
+  const seen = new Set<string>();
+  const result: { url: string; alt: string }[] = [];
+  for (const image of [hero, ...gallery]) {
+    if (!image?.url || seen.has(image.url)) continue;
+    seen.add(image.url);
+    result.push(image);
+  }
+  return result.slice(0, 8);
+}
 
 /**
  * Premium section library — every generated site is composed from these.
@@ -638,23 +655,14 @@ function RatingPill({ content, onDark }: { content: SiteContent; onDark?: boolea
 }
 
 function HeroCinematic({ content, dark }: { content: SiteContent; dark?: boolean }) {
-  const { hero, business } = content;
-  const image = hero.image;
-  const onDark = Boolean(image?.url) || dark;
+  const { hero, business, gallery } = content;
+  const images = heroCarouselImages(hero.image, gallery.images);
+  const onDark = images.length > 0 || dark;
 
   return (
     <section id="top" className="relative isolate -mt-[4.5rem] overflow-hidden pt-[4.5rem]">
-      {image?.url ? (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={optimizeImage(image.url, 2000)}
-            alt={image.alt || business.name}
-            fetchPriority="high"
-            className="absolute inset-0 -z-20 h-full w-full object-cover"
-          />
-          <span aria-hidden className="scrim absolute inset-0 -z-10" />
-        </>
+      {images.length > 0 ? (
+        <HeroCarousel images={images} fallbackAlt={business.name} />
       ) : (
         <>
           <span aria-hidden className="aurora -z-20" />
@@ -714,7 +722,8 @@ function HeroCinematic({ content, dark }: { content: SiteContent; dark?: boolean
 }
 
 function HeroSplit({ content }: { content: SiteContent }) {
-  const { hero, business } = content;
+  const { hero, business, gallery } = content;
+  const images = heroCarouselImages(hero.image, gallery.images);
   return (
     <section id="top" className="relative isolate overflow-hidden">
       <span aria-hidden className="aurora aurora-soft -z-20" />
@@ -742,14 +751,8 @@ function HeroSplit({ content }: { content: SiteContent }) {
 
           <div className="rise relative [animation-delay:.3s]">
             <div className="zoomable edge relative aspect-[4/5] overflow-hidden rounded-[2rem] shadow-[var(--shadow-float)]">
-              {hero.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={optimizeImage(hero.image.url, 1400)}
-                  alt={hero.image.alt || business.name}
-                  fetchPriority="high"
-                  className="h-full w-full object-cover"
-                />
+              {images.length > 0 ? (
+                <HeroCarousel images={images} fallbackAlt={business.name} scrim={false} />
               ) : (
                 <div className="brand-wash flex h-full w-full items-center justify-center p-10">
                   <span className="display-sm text-center text-white/95">{business.name}</span>
@@ -789,7 +792,8 @@ function HeroSplit({ content }: { content: SiteContent }) {
 }
 
 function HeroCentered({ content, dark }: { content: SiteContent; dark?: boolean }) {
-  const { hero, business } = content;
+  const { hero, business, gallery } = content;
+  const images = heroCarouselImages(hero.image, gallery.images);
   return (
     <section id="top" className="relative isolate overflow-hidden">
       <span aria-hidden className="aurora -z-20" />
@@ -825,14 +829,9 @@ function HeroCentered({ content, dark }: { content: SiteContent; dark?: boolean 
           <RatingPill content={content} onDark={dark} />
         </div>
 
-        {hero.image && (
-          <div className="rise zoomable edge mx-auto mt-20 aspect-[16/8] max-w-5xl overflow-hidden rounded-[2rem] shadow-[var(--shadow-float)] [animation-delay:.4s]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={optimizeImage(hero.image.url, 1800)}
-              alt={hero.image.alt || business.name}
-              className="h-full w-full object-cover"
-            />
+        {images.length > 0 && (
+          <div className="rise zoomable edge relative mx-auto mt-20 aspect-[16/8] max-w-5xl overflow-hidden rounded-[2rem] shadow-[var(--shadow-float)] [animation-delay:.4s]">
+            <HeroCarousel images={images} fallbackAlt={business.name} scrim={false} />
           </div>
         )}
       </Container>
@@ -1124,38 +1123,13 @@ export function GallerySection({ content, dark: _dark }: { content: SiteContent;
   const images = gallery.images.filter((image) => image.url).slice(0, 7);
   if (images.length === 0) return null;
 
-  const spanFirst = images.length >= 5;
-
   return (
     <Section id="gallery" tone="raised">
       <Container wide>
         <SectionHeading eyebrow="Gallery" sub="A look inside.">
           {gallery.heading}
         </SectionHeading>
-        <div className="grid auto-rows-[13rem] grid-cols-2 gap-4 sm:auto-rows-[15rem] lg:grid-cols-4">
-          {images.map((image, index) => (
-            <figure
-              key={image.url + index}
-              className={clsx(
-                "reveal zoomable edge group relative overflow-hidden rounded-[1.5rem] border border-hairline",
-                spanFirst && index === 0 && "col-span-2 row-span-2"
-              )}
-              style={{ animationDelay: `${index * 45}ms` }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={optimizeImage(image.url, spanFirst && index === 0 ? 1200 : 700)}
-                alt={image.alt || `${business.name} photo ${index + 1}`}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
-              <span
-                aria-hidden
-                className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-              />
-            </figure>
-          ))}
-        </div>
+        <GalleryGrid images={images} businessName={business.name} />
       </Container>
     </Section>
   );
