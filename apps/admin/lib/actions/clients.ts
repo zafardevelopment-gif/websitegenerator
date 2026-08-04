@@ -10,7 +10,18 @@ import { listSites, updateSite } from "@aiwebsite/db/repositories/sites";
 import type { ClientRow } from "@aiwebsite/db/types";
 
 import { revalidateSiteTag } from "../server/renderer";
-import { REQUIREMENTS_CHECKLIST_ITEMS } from "../constants/clients";
+
+// Keep in sync with REQUIREMENTS_CHECKLIST_ITEMS keys in "../constants/clients".
+// Duplicated locally (rather than imported) because a "use server" file can only
+// export async functions — importing a shared const that a client component also
+// imports directly causes Next's flight compiler to mis-register it as an action export.
+const REQUIREMENTS_CHECKLIST_KEYS = [
+  "logo_received",
+  "content_confirmed",
+  "domain_decided",
+  "payment_received",
+  "google_business_shared",
+] as const;
 
 export type ClientResult<T = undefined> =
   | { ok: true; message: string; data?: T }
@@ -67,7 +78,7 @@ export async function convertLeadToClientAction(
       site_id: site.id,
       business_name: lead.business_name,
       onboarding_checklist: Object.fromEntries(
-        REQUIREMENTS_CHECKLIST_ITEMS.map((item) => [item.key, false])
+        REQUIREMENTS_CHECKLIST_KEYS.map((key) => [key, false])
       ),
       is_active: true,
     });
