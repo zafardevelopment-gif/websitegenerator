@@ -35,6 +35,7 @@ import {
 } from "@aiwebsite/templates";
 
 import { buildAiEngine } from "../server/ai-engine";
+import { applyGooglePhotos, fetchAndUploadGooglePhotos } from "../server/google-photo-fill";
 import { buildMapUrls, leadToFacts } from "../server/lead-facts";
 import { fillContentImages } from "../server/stock-fill";
 
@@ -168,16 +169,27 @@ export async function generateWebsiteAction(
     // Map links are computed from the lead's real coordinates/place_id, never
     // left to the AI (which correctly leaves unknown location data blank).
     Object.assign(primary.value.business, buildMapUrls(lead));
-    // Stock auto-fill: demos never ship with empty image slots.
-    const filled = await fillContentImages(supabase, primary.value, lead.category).catch(() => ({
-      content: primary.value,
-      filled: 0,
-    }));
+    // Real Google Business photos first (if the lead has a place_id and
+    // Google Places + Cloudinary are configured) — fetched/uploaded once,
+    // then applied to every language version. No manual import needed.
+    const googlePhotos = await fetchAndUploadGooglePhotos(supabase, lead, user.id).catch(
+      () => [] as Awaited<ReturnType<typeof fetchAndUploadGooglePhotos>>
+    );
+    const withGooglePhotos = applyGooglePhotos(primary.value, googlePhotos);
+    // Stock auto-fill: only tops up whatever slots are still empty.
+    const filled = await fillContentImages(
+      supabase,
+      withGooglePhotos.content,
+      lead.category
+    ).catch(() => ({ content: withGooglePhotos.content, filled: 0 }));
+    const summaryParts = [`AI generated (${tone}, ${primaryLanguage})`];
+    if (withGooglePhotos.imported > 0) summaryParts.push(`${withGooglePhotos.imported} Google photos`);
+    if (filled.filled > 0) summaryParts.push(`${filled.filled} stock images`);
     const version = await createSiteVersion(
       supabase,
       site.id,
       filled.content as unknown as Json,
-      `AI generated (${tone}, ${primaryLanguage})${filled.filled > 0 ? ` + ${filled.filled} stock images` : ""}`,
+      summaryParts.join(" + "),
       user.id
     );
     await setCurrentVersion(supabase, site.id, version.id);
@@ -190,10 +202,11 @@ export async function generateWebsiteAction(
         language: "hi",
       });
       Object.assign(hindi.value.business, buildMapUrls(lead));
+      const hindiWithPhotos = applyGooglePhotos(hindi.value, googlePhotos);
       await createSiteVersion(
         supabase,
         site.id,
-        hindi.value as unknown as Json,
+        hindiWithPhotos.content as unknown as Json,
         `AI generated (${tone}, hi)`,
         user.id
       );
