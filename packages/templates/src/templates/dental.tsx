@@ -22,9 +22,9 @@ import type { TemplateProps } from "../types";
  * on the page (marquee + stats) because medical intent converts on credibility.
  * Layouts: "classic" (cinematic hero) | "split-hero" (text + portrait visual).
  */
-export function DentalTemplate({ content, branding, layout, demo }: TemplateProps) {
+export function DentalTemplate({ content, branding, layout, demo, tone = "premium" }: TemplateProps) {
   return (
-    <SiteShell content={content} branding={branding} demo={demo}>
+    <SiteShell content={content} branding={branding} demo={demo} tone={tone}>
       <SiteHeader content={content} />
       <main>
         <Hero content={content} layout={layout === "split-hero" ? "split" : "cinematic"} />

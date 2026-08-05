@@ -30,6 +30,45 @@ const RADIUS_SCALE: Record<NonNullable<ColorVariant["radius"]>, string> = {
   pill: "2rem",
 };
 
+/** Visual tone preset — mirrors `TonePreset` in ./types and @aiwebsite/ai. */
+export type ToneKey = "premium" | "friendly" | "medical-professional" | "luxury";
+
+/**
+ * Tone → CSS custom properties, layered on top of the color variant's
+ * tokens in `brandingStyle()`. These drive the primary visible signal for
+ * tone: heading weight/tracking, corner radius, section density, body size.
+ */
+export const TONE_STYLES: Record<ToneKey, Record<string, string>> = {
+  premium: {
+    "--site-heading-weight": "800",
+    "--site-heading-tracking": "-0.045em",
+    "--site-radius": "0.75rem",
+    "--site-section-py": "5.5rem",
+    "--site-body-scale": "1",
+  },
+  friendly: {
+    "--site-heading-weight": "700",
+    "--site-heading-tracking": "-0.015em",
+    "--site-radius": "1.75rem",
+    "--site-section-py": "6rem",
+    "--site-body-scale": "1.05",
+  },
+  "medical-professional": {
+    "--site-heading-weight": "600",
+    "--site-heading-tracking": "-0.01em",
+    "--site-radius": "0.5rem",
+    "--site-section-py": "4.5rem",
+    "--site-body-scale": "0.97",
+  },
+  luxury: {
+    "--site-heading-weight": "500",
+    "--site-heading-tracking": "0.015em",
+    "--site-radius": "0.25rem",
+    "--site-section-py": "7rem",
+    "--site-body-scale": "1.02",
+  },
+};
+
 export interface LayoutVariant {
   key: string;
   label: string;
@@ -119,8 +158,15 @@ export function resolveBranding(
   };
 }
 
-/** CSS variables injected on the site root element. */
-export function brandingStyle(branding: ResolvedBranding): Record<string, string> {
+/**
+ * CSS variables injected on the site root element. `tone` (default
+ * "premium") layers heading weight/tracking, corner radius and section
+ * density on top of the color variant's tokens.
+ */
+export function brandingStyle(
+  branding: ResolvedBranding,
+  tone: ToneKey = "premium"
+): Record<string, string> {
   const c = branding.colors;
   return {
     "--site-primary": c.primary,
@@ -135,5 +181,8 @@ export function brandingStyle(branding: ResolvedBranding): Record<string, string
     "--site-radius": RADIUS_SCALE[c.radius ?? "soft"],
     "--site-font-heading": `'${branding.fontHeading}', ui-sans-serif, sans-serif`,
     "--site-font-body": `'${branding.fontBody}', ui-sans-serif, sans-serif`,
+    // Tone tokens override radius (and add heading/spacing tokens) so the
+    // tone preset reads as the primary visible signal.
+    ...TONE_STYLES[tone],
   };
 }

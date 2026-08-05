@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
+import { ExternalLink, RefreshCw } from "lucide-react";
+
 import {
   Badge,
   Button,
@@ -40,10 +42,13 @@ export function GenerateWizard({
   leadId,
   templates,
   defaultTemplateKey,
+  sitesUrl,
 }: {
   leadId: string;
   templates: WizardTemplate[];
   defaultTemplateKey: string;
+  /** Base URL of the sites app, used to embed the live `/preview/[template]` route. */
+  sitesUrl: string;
 }) {
   const router = useRouter();
   const [templateKey, setTemplateKey] = React.useState(defaultTemplateKey);
@@ -52,6 +57,7 @@ export function GenerateWizard({
   const [tone, setTone] = React.useState("premium");
   const [language, setLanguage] = React.useState("en");
   const [isPending, startTransition] = React.useTransition();
+  const [previewKey, setPreviewKey] = React.useState(0);
 
   const template = templates.find((t) => t.key === templateKey) ?? templates[0];
   const effectiveColor = template?.colorVariants.some((v) => v.key === colorVariant)
@@ -60,6 +66,10 @@ export function GenerateWizard({
   const effectiveLayout = template?.layoutVariants.some((v) => v.key === layoutVariant)
     ? layoutVariant
     : (template?.layoutVariants[0]?.key ?? "");
+
+  const previewUrl = template
+    ? `${sitesUrl}/preview/${template.key}?color=${encodeURIComponent(effectiveColor)}&layout=${encodeURIComponent(effectiveLayout)}&tone=${encodeURIComponent(tone)}`
+    : null;
 
   function generate() {
     startTransition(async () => {
@@ -81,7 +91,8 @@ export function GenerateWizard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">1 · Template</CardTitle>
@@ -195,6 +206,49 @@ export function GenerateWizard({
             Claude is writing — usually 30–90 seconds
           </Badge>
         )}
+      </div>
+      </div>
+
+      <div className="lg:sticky lg:top-4 lg:self-start">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base">Live preview</CardTitle>
+              <CardDescription>Updates as you change template, color, layout or tone.</CardDescription>
+            </div>
+            <span className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Reload preview"
+                onClick={() => setPreviewKey((k) => k + 1)}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              {previewUrl && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink />
+                    Open
+                  </a>
+                </Button>
+              )}
+            </span>
+          </CardHeader>
+          <CardContent>
+            {previewUrl ? (
+              <iframe
+                key={`${previewKey}-${previewUrl}`}
+                src={previewUrl}
+                title="Template preview"
+                className="h-[70vh] w-full rounded-md border bg-white shadow-sm"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Select a template to preview it.</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

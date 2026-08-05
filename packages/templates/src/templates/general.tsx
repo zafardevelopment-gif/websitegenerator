@@ -21,10 +21,10 @@ import type { TemplateProps } from "../types";
  * Local Pro — versatile professional layout for any local business.
  * Layouts: "classic" (editorial split hero) | "compact" (cinematic, tighter).
  */
-export function GeneralTemplate({ content, branding, layout, demo }: TemplateProps) {
+export function GeneralTemplate({ content, branding, layout, demo, tone = "premium" }: TemplateProps) {
   const compact = layout === "compact";
   return (
-    <SiteShell content={content} branding={branding} demo={demo}>
+    <SiteShell content={content} branding={branding} demo={demo} tone={tone}>
       <SiteHeader content={content} />
       <main>
         <Hero content={content} layout={compact ? "cinematic" : "split"} />

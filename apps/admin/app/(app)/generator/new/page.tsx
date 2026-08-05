@@ -71,6 +71,7 @@ export default async function NewSitePage({
         leadId={lead.id}
         templates={templates}
         defaultTemplateKey={defaultTemplateKey}
+        sitesUrl={process.env.NEXT_PUBLIC_SITES_URL ?? "http://localhost:3001"}
       />
     </div>
   );

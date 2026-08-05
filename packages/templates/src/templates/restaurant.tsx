@@ -20,10 +20,10 @@ import type { TemplateProps } from "../types";
  * the gallery carries most of the persuasion.
  * Layouts: "classic" (story first) | "gallery-first" (menu + photos first).
  */
-export function RestaurantTemplate({ content, branding, layout, demo }: TemplateProps) {
+export function RestaurantTemplate({ content, branding, layout, demo, tone = "premium" }: TemplateProps) {
   const menuFirst = layout === "gallery-first";
   return (
-    <SiteShell content={content} branding={branding} demo={demo}>
+    <SiteShell content={content} branding={branding} demo={demo} tone={tone}>
       <SiteHeader content={content} variant="dark" />
       <main>
         <Hero content={content} layout="cinematic" dark />

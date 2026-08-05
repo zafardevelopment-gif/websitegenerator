@@ -125,10 +125,12 @@ function Container({
   children,
   className,
   wide,
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   wide?: boolean;
+  style?: React.CSSProperties;
 }) {
   return (
     <div
@@ -137,6 +139,7 @@ function Container({
         wide ? "max-w-[88rem]" : "max-w-6xl",
         className
       )}
+      style={style}
     >
       {children}
     </div>
@@ -311,18 +314,24 @@ export function SiteShell({
   content,
   branding,
   demo,
+  tone = "premium",
   children,
 }: {
   content: SiteContent;
   branding: ResolvedBranding;
   demo: DemoInfo;
+  /** Visual tone — see packages/templates/src/types.ts TonePreset. Defaults to "premium". */
+  tone?: "premium" | "friendly" | "medical-professional" | "luxury";
   children: React.ReactNode;
 }) {
   const b = content.business;
   return (
     <div
-      style={brandingStyle(branding) as React.CSSProperties}
-      className="site-root relative min-h-screen overflow-x-clip bg-site font-body text-ink antialiased"
+      style={brandingStyle(branding, tone) as React.CSSProperties}
+      className={clsx(
+        "site-root relative min-h-screen overflow-x-clip bg-site font-body text-ink antialiased",
+        `tone-${tone}`
+      )}
     >
       <link
         rel="stylesheet"
@@ -670,7 +679,13 @@ function HeroCinematic({ content, dark }: { content: SiteContent; dark?: boolean
         </>
       )}
 
-      <Container className="relative flex min-h-[86svh] flex-col justify-center py-24 sm:py-32">
+      <Container
+        className="relative flex min-h-[86svh] flex-col justify-center"
+        style={{
+          paddingTop: "var(--site-section-py, 6rem)",
+          paddingBottom: "var(--site-section-py, 6rem)",
+        }}
+      >
         <div className="max-w-4xl">
           {hero.badge && (
             <span

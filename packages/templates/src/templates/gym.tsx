@@ -22,10 +22,10 @@ import type { TemplateProps } from "../types";
  * band can be pulled directly under the hero.
  * Layouts: "classic" | "stats-first".
  */
-export function GymTemplate({ content, branding, layout, demo }: TemplateProps) {
+export function GymTemplate({ content, branding, layout, demo, tone = "premium" }: TemplateProps) {
   const statsFirst = layout === "stats-first";
   return (
-    <SiteShell content={content} branding={branding} demo={demo}>
+    <SiteShell content={content} branding={branding} demo={demo} tone={tone}>
       <SiteHeader content={content} variant="dark" />
       <main>
         <Hero content={content} layout="cinematic" dark />

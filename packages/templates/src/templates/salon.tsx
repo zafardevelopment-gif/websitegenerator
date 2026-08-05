@@ -21,9 +21,9 @@ import type { TemplateProps } from "../types";
  * service menu is rendered as a typographic list rather than cards.
  * Layouts: "classic" (cinematic) | "split-hero".
  */
-export function SalonTemplate({ content, branding, layout, demo }: TemplateProps) {
+export function SalonTemplate({ content, branding, layout, demo, tone = "premium" }: TemplateProps) {
   return (
-    <SiteShell content={content} branding={branding} demo={demo}>
+    <SiteShell content={content} branding={branding} demo={demo} tone={tone}>
       <SiteHeader content={content} />
       <main>
         <Hero content={content} layout={layout === "split-hero" ? "split" : "cinematic"} />

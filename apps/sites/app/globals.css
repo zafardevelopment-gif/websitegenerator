@@ -50,26 +50,32 @@ html {
 
 .display {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: var(--site-heading-weight, 700);
   line-height: 0.98;
-  letter-spacing: -0.035em;
+  letter-spacing: var(--site-heading-tracking, -0.035em);
   text-wrap: balance;
   font-size: clamp(2.5rem, 1.4rem + 4.6vw, 5.25rem);
 }
 
 .display-sm {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: var(--site-heading-weight, 700);
   line-height: 1.04;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--site-heading-tracking, -0.03em);
   text-wrap: balance;
   font-size: clamp(1.875rem, 1.25rem + 2.4vw, 3.25rem);
 }
 
 .lede {
-  font-size: var(--site-lede);
+  font-size: calc(var(--site-lede) * var(--site-body-scale, 1));
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+/* ── Tone density: heavier/lighter section rhythm per tone preset ────── */
+.site-root section {
+  padding-top: var(--site-section-py, 5rem);
+  padding-bottom: var(--site-section-py, 5rem);
 }
 
 .eyebrow {

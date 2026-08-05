@@ -284,3 +284,100 @@ export const SAMPLE_CONTENT: Record<string, SiteContent> = {
     tagline: "Clear advice. Honest work.",
   }),
 };
+
+/** Tone → sample hero copy per template, used by the standalone preview route. */
+export const TONE_SAMPLE_COPY: Record<
+  string,
+  Record<"premium" | "friendly" | "medical-professional" | "luxury", { title: string; subtitle: string }>
+> = {
+  dental: {
+    premium: {
+      title: "Precision dentistry, redefined",
+      subtitle: "Advanced, meticulous care in the heart of Karol Bagh — trusted by 300+ discerning patients.",
+    },
+    friendly: {
+      title: "Smiles start here — book today!",
+      subtitle: "Friendly, painless dentistry for the whole family. We can't wait to meet you.",
+    },
+    "medical-professional": {
+      title: "Comprehensive dental care you can trust",
+      subtitle: "Evidence-based treatment plans, modern sterilization standards and experienced surgeons.",
+    },
+    luxury: {
+      title: "An exceptional standard of dental artistry",
+      subtitle: "A refined, private practice experience — where every smile is crafted with uncompromising care.",
+    },
+  },
+  restaurant: {
+    premium: {
+      title: "Flavor, elevated to an art form",
+      subtitle: "A refined menu built on bold spice and impeccable technique — the city's most talked-about table.",
+    },
+    friendly: {
+      title: "Pull up a chair — dinner's on us tonight!",
+      subtitle: "Warm hospitality, generous portions and dishes that taste like home.",
+    },
+    "medical-professional": {
+      title: "Freshly prepared, quality-assured dining",
+      subtitle: "Sourced ingredients, rigorous hygiene standards and consistent, dependable service.",
+    },
+    luxury: {
+      title: "An unforgettable evening, by design",
+      subtitle: "Curated tasting menus and an atmosphere reserved for those who expect the extraordinary.",
+    },
+  },
+  salon: {
+    premium: {
+      title: "Your best look, expertly crafted",
+      subtitle: "Precision styling and premium treatments from a team obsessed with the details.",
+    },
+    friendly: {
+      title: "Fresh cut, fresh you — walk-ins welcome!",
+      subtitle: "A relaxed, friendly space to unwind while we take care of the rest.",
+    },
+    "medical-professional": {
+      title: "Trusted hair and skin care, done right",
+      subtitle: "Trained stylists, quality products and hygienic, consistent service every visit.",
+    },
+    luxury: {
+      title: "Indulgent beauty, without compromise",
+      subtitle: "A private, boutique studio experience for those who settle for nothing less than exceptional.",
+    },
+  },
+  gym: {
+    premium: {
+      title: "Train harder. Look sharper. Perform better.",
+      subtitle: "Elite coaching and premium equipment for members who take results seriously.",
+    },
+    friendly: {
+      title: "Come as you are — let's get moving!",
+      subtitle: "A welcoming community gym where every fitness level belongs.",
+    },
+    "medical-professional": {
+      title: "Structured, safe and results-driven training",
+      subtitle: "Certified trainers, progress tracking and programs built on proven methodology.",
+    },
+    luxury: {
+      title: "Redefine your limits, in exceptional surroundings",
+      subtitle: "A private training experience with world-class equipment and dedicated coaching.",
+    },
+  },
+  general: {
+    premium: {
+      title: "Expertise you can rely on",
+      subtitle: "Sharp, dependable service from a team that takes every engagement seriously.",
+    },
+    friendly: {
+      title: "We're here to help — just ask!",
+      subtitle: "Approachable experts who make working together easy and stress-free.",
+    },
+    "medical-professional": {
+      title: "Professional, transparent, dependable service",
+      subtitle: "Clear communication, fair pricing and consistent, high-quality delivery.",
+    },
+    luxury: {
+      title: "A standard of service, uncompromised",
+      subtitle: "Bespoke, white-glove attention for clients who expect excellence at every step.",
+    },
+  },
+};
