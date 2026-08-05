@@ -1,4 +1,4 @@
-import type { ZodType } from "zod/v4";
+import { toJSONSchema, type ZodType } from "zod/v4";
 
 import { extractJson } from "./json";
 import { AnthropicProvider } from "./providers/anthropic";
@@ -138,8 +138,29 @@ export class AiEngine {
       }
 
       // Generic path: JSON-mode text + repair loop.
+      // Providers here (Gemini, OpenAI-compatible) don't get Claude's
+      // schema-constrained decoding, so — unlike the fast path above — they
+      // only ever see a prose description of the shape unless we hand them
+      // the real JSON Schema. Without it they guess field names on complex
+      // nested schemas (like SiteContent) and fail validation repeatedly,
+      // exhausting all repair attempts. Appending the schema fixes this.
+      let jsonSchemaText = "";
       try {
-        let completion = await this.tryProvider(provider, { ...request, json: true });
+        jsonSchemaText = JSON.stringify(toJSONSchema(schema));
+      } catch {
+        // Some schema constructs (e.g. certain refinements) can't convert to
+        // JSON Schema — fall back to the prose-only prompt in that case.
+      }
+      const schemaAppendix = jsonSchemaText
+        ? `\n\nYour output MUST validate against this JSON Schema:\n${jsonSchemaText}`
+        : "";
+
+      try {
+        let completion = await this.tryProvider(provider, {
+          ...request,
+          system: request.system + schemaAppendix,
+          json: true,
+        });
         totalIn += completion.tokensIn;
         totalOut += completion.tokensOut;
 
@@ -167,7 +188,7 @@ export class AiEngine {
                   .join("\n");
 
           completion = await this.tryProvider(provider, {
-            system: request.system,
+            system: request.system + schemaAppendix,
             maxTokens: request.maxTokens,
             json: true,
             prompt: [
