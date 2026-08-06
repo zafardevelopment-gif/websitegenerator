@@ -144,6 +144,7 @@ export async function logWhatsAppSentAction(input: unknown): Promise<OutreachRes
 
     revalidatePath(`/leads/${lead.id}`);
     revalidatePath("/outreach");
+    revalidatePath("/generator");
     return { ok: true, message: "Logged — status updated to WhatsApp Sent." };
   } catch (e) {
     return { ok: false, error: friendly(e) };

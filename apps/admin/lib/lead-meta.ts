@@ -61,7 +61,8 @@ export const PRIORITY_CLASSES: Record<Priority, string> = {
   low: "bg-muted text-muted-foreground",
 };
 
-/** Builds a wa.me deep link from a raw phone/WhatsApp number. */
-export function waLink(phone: string): string {
-  return `https://wa.me/${phone.replace(/[^0-9]/g, "")}`;
+/** Builds a wa.me deep link from a raw phone/WhatsApp number, optionally prefilled. */
+export function waLink(phone: string, text?: string): string {
+  const base = `https://wa.me/${phone.replace(/[^0-9]/g, "")}`;
+  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
 }
