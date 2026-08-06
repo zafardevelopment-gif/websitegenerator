@@ -33,7 +33,7 @@ export interface PlaceSearchHit extends EnrichedPlaceResult {
 
 export type SearchGooglePlacesResult =
   | { ok: true; results: PlaceSearchHit[]; nextPageToken: string | null }
-  | { ok: false; error: string };
+  | { ok: false; error: string; retryable?: boolean };
 
 /**
  * Text-searches Google Places and enriches each hit with phone/website, so
@@ -60,6 +60,16 @@ export async function searchGooglePlacesAction(input: unknown): Promise<SearchGo
 
     return { ok: true, results: flagged, nextPageToken };
   } catch (e) {
+    // Google's next_page_token isn't valid for a few seconds after it's
+    // issued — our own retry loop already waited ~6s; if it's still not
+    // ready, tell the client to keep retrying instead of showing an error.
+    if (e instanceof Error && e.message === "RETRYABLE_PAGE_TOKEN") {
+      return {
+        ok: false,
+        error: "Still preparing the next page…",
+        retryable: true,
+      };
+    }
     return { ok: false, error: friendlyError(e) };
   }
 }

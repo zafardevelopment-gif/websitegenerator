@@ -95,12 +95,12 @@ export async function searchPlacesByText(
   url.searchParams.set("key", apiKey);
 
   // A fresh next_page_token isn't valid for a couple of seconds — Google
-  // returns INVALID_REQUEST until it activates, so retry briefly when
-  // paginating instead of surfacing that as an error.
+  // returns INVALID_REQUEST until it activates, so retry with backoff when
+  // paginating instead of surfacing that as an error immediately.
   let payload: TextSearchResponse = { status: "UNKNOWN" };
-  const attempts = pageToken ? 4 : 1;
+  const attempts = pageToken ? 5 : 1;
   for (let i = 0; i < attempts; i++) {
-    if (i > 0) await sleep(1200);
+    if (i > 0) await sleep(1500);
     const response = await fetch(url);
     payload = (await response.json().catch(() => ({ status: "UNKNOWN" }))) as TextSearchResponse;
     if (payload.status !== "INVALID_REQUEST") break;
@@ -108,7 +108,11 @@ export async function searchPlacesByText(
 
   if (payload.status === "ZERO_RESULTS") return { results: [], nextPageToken: null };
   if (payload.status === "INVALID_REQUEST" && pageToken) {
-    throw new Error("Still preparing the next page — wait a moment and try \"Load more\" again.");
+    // Signal to the caller (searchGooglePlacesAction) that this is a
+    // transient "not ready yet" state, not a real failure — it's retried
+    // client-side too, since one server invocation can't wait forever.
+    const err = new Error("RETRYABLE_PAGE_TOKEN");
+    throw err;
   }
   if (payload.status !== "OK") {
     throw new Error(payload.error_message || `Google Places error: ${payload.status}`);

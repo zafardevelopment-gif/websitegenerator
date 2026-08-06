@@ -51,6 +51,7 @@ type WebsiteFilter = "all" | "has" | "none";
 type PhoneFilter = "all" | "has" | "none";
 
 const MIN_RATINGS = [0, 3, 3.5, 4, 4.5];
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function FindLeadsPanel() {
   const router = useRouter();
@@ -87,17 +88,32 @@ export function FindLeadsPanel() {
       return;
     }
     startSearching(async () => {
-      const result = await searchGooglePlacesAction({ query, pageToken });
-      if (result.ok) {
-        setLastQuery(query);
-        setResults((prev) => (pageToken ? [...(prev ?? []), ...result.results] : result.results));
-        setNextPageToken(result.nextPageToken);
-        if (!pageToken) setSelected(new Set());
-        if (result.results.length === 0 && !pageToken) {
-          toast.info("No businesses found — try a broader search.");
+      const MAX_RETRIES = 3;
+      let toldUser = false;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const result = await searchGooglePlacesAction({ query, pageToken });
+        if (result.ok) {
+          setLastQuery(query);
+          setResults((prev) =>
+            pageToken ? [...(prev ?? []), ...result.results] : result.results
+          );
+          setNextPageToken(result.nextPageToken);
+          if (!pageToken) setSelected(new Set());
+          if (result.results.length === 0 && !pageToken) {
+            toast.info("No businesses found — try a broader search.");
+          }
+          return;
         }
-      } else {
-        toast.error(result.error);
+        if (result.retryable && attempt < MAX_RETRIES) {
+          if (!toldUser) {
+            toast.info("Google is still preparing the next page — retrying…");
+            toldUser = true;
+          }
+          await sleep(2000);
+          continue;
+        }
+        toast.error(result.retryable ? "Still not ready — try \"Load more\" again in a moment." : result.error);
+        return;
       }
     });
   }
