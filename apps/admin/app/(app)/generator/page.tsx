@@ -21,11 +21,14 @@ export default async function GeneratorPage() {
 
   // One round-trip for every lead behind the listed sites.
   const leadIds = [...new Set(sites.map((s) => s.lead_id).filter(Boolean))];
-  const leadsById = new Map<string, Pick<LeadRow, "id" | "status" | "owner_name" | "phone" | "whatsapp">>();
+  const leadsById = new Map<
+    string,
+    Pick<LeadRow, "id" | "status" | "owner_name" | "phone" | "whatsapp" | "category">
+  >();
   if (leadIds.length > 0) {
     const { data } = await supabase
       .from("aiwebsite_leads")
-      .select("id, status, owner_name, phone, whatsapp")
+      .select("id, status, owner_name, phone, whatsapp, category")
       .in("id", leadIds);
     for (const lead of data ?? []) leadsById.set(lead.id, lead);
   }
@@ -49,6 +52,7 @@ export default async function GeneratorPage() {
       leadStatus: lead?.status ?? null,
       ownerName: lead?.owner_name ?? null,
       phone: lead?.whatsapp ?? lead?.phone ?? null,
+      category: lead?.category ?? null,
     };
   });
 

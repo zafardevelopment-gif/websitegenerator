@@ -25,22 +25,63 @@ export type WhatsAppTarget = {
   ownerName: string | null;
   phone: string | null;
   demoLink: string;
+  /** Lead's business category (e.g. "Dental Clinic", "Gym") — picks the pitch wording. */
+  category: string | null;
 };
 
-/** Default pitch — matches the message the team sends by hand today. */
+/**
+ * One pitch config per sector — matched against the lead's category by
+ * keyword. Add a new entry here whenever a new template ships (see
+ * packages/templates/src/registry.tsx for the matching template list).
+ */
+interface SectorPitch {
+  test: RegExp;
+  /** What the business is called mid-sentence, e.g. "your {noun}". */
+  noun: string;
+  /** Dental leads get the "Dr." honorific; everyone else gets a plain greeting. */
+  useDrGreeting?: boolean;
+}
+
+const SECTOR_PITCHES: SectorPitch[] = [
+  { test: /dental|dentist|orthodont/i, noun: "clinic", useDrGreeting: true },
+  { test: /restaurant|cafe|café|dhaba|bakery|food|diner|eatery/i, noun: "restaurant" },
+  { test: /salon|spa|parlour|parlor|beauty/i, noun: "salon" },
+  { test: /gym|fitness|crossfit|yoga|workout/i, noun: "gym" },
+  { test: /clinic|hospital|physio|health/i, noun: "clinic" },
+];
+
+function pitchFor(category: string | null): SectorPitch {
+  if (category) {
+    const match = SECTOR_PITCHES.find((p) => p.test.test(category));
+    if (match) return match;
+  }
+  return { noun: "business" };
+}
+
+/** Default pitch text per sector — editable in the dialog before sending. */
 export function buildDemoPitch({
   ownerName,
+  category,
   demoLink,
 }: {
   ownerName: string | null;
+  category: string | null;
   demoLink: string;
 }): string {
-  const greeting = ownerName ? `Hi Dr. ${ownerName} 👋` : "Hi Dr. 👋";
+  const { noun, useDrGreeting } = pitchFor(category);
+  const greeting = useDrGreeting
+    ? ownerName
+      ? `Hi Dr. ${ownerName} 👋`
+      : "Hi Dr. 👋"
+    : ownerName
+      ? `Hi ${ownerName} 👋`
+      : "Hi there 👋";
+
   return [
     greeting,
-    "I came across your clinic and noticed that you have excellent Google reviews. I also felt that your clinic deserves a professional website, so I created a free demo website just for you.",
-    `🌐 Demo: ${demoLink}`,
-    "Please have a look and let me know your honest feedback. If you like it and would like to make it your clinic's official website, just reply to this message or give me a call. I'd be happy to help.",
+    `Noticed your ${noun}'s great Google reviews — made you a free demo website.`,
+    `🌐 ${demoLink}`,
+    `Like it? Reply here or call me to make it official.`,
   ].join("\n");
 }
 

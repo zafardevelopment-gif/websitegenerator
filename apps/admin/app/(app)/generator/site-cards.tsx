@@ -35,6 +35,7 @@ export type GeneratorSiteCard = {
   leadStatus: LeadStatus | null;
   ownerName: string | null;
   phone: string | null;
+  category: string | null;
 };
 
 export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
@@ -172,6 +173,7 @@ export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
                       ownerName: site.ownerName,
                       phone: site.phone,
                       demoLink: site.demoLink,
+                      category: site.category,
                     })
                   }
                 >
