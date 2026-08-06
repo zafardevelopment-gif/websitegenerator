@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ExternalLink, MessageCircle, Pencil, User } from "lucide-react";
+import { ExternalLink, MessageCircle, Pencil, Search, User } from "lucide-react";
 
 import type { LeadStatus, SiteStatus } from "@aiwebsite/db/types";
-import { Badge, Button, Card, CardContent } from "@aiwebsite/ui";
+import { Badge, Button, Card, CardContent, Input, NativeSelect } from "@aiwebsite/ui";
 
 import { LeadStatusBadge } from "@/components/lead-badges";
 import { formatRelative } from "@/lib/format";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/lead-meta";
 
 import { WhatsAppSendDialog, type WhatsAppTarget } from "./whatsapp-send-dialog";
 
@@ -20,6 +21,8 @@ const STATUS_VARIANT = {
   archived: "outline",
   converted: "default",
 } as const;
+
+const SITE_STATUSES: SiteStatus[] = ["draft", "live", "paused", "expired", "archived", "converted"];
 
 export type GeneratorSiteCard = {
   id: string;
@@ -36,11 +39,91 @@ export type GeneratorSiteCard = {
 
 export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
   const [target, setTarget] = React.useState<WhatsAppTarget | null>(null);
+  const [query, setQuery] = React.useState("");
+  const [leadStatus, setLeadStatus] = React.useState<LeadStatus | "all">("all");
+  const [siteStatus, setSiteStatus] = React.useState<SiteStatus | "all">("all");
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return sites.filter((site) => {
+      if (leadStatus !== "all" && site.leadStatus !== leadStatus) return false;
+      if (siteStatus !== "all" && site.status !== siteStatus) return false;
+      if (
+        q &&
+        !site.name.toLowerCase().includes(q) &&
+        !site.slug.toLowerCase().includes(q) &&
+        !(site.ownerName ?? "").toLowerCase().includes(q)
+      )
+        return false;
+      return true;
+    });
+  }, [sites, query, leadStatus, siteStatus]);
 
   return (
     <>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Search name, slug, owner..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <NativeSelect
+          aria-label="Filter by lead status"
+          className="w-48"
+          value={leadStatus}
+          onChange={(e) => setLeadStatus(e.target.value as LeadStatus | "all")}
+        >
+          <option value="all">All lead statuses</option>
+          {LEAD_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {LEAD_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label="Filter by site status"
+          className="w-40"
+          value={siteStatus}
+          onChange={(e) => setSiteStatus(e.target.value as SiteStatus | "all")}
+        >
+          <option value="all">All site statuses</option>
+          {SITE_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s[0].toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </NativeSelect>
+        {(query || leadStatus !== "all" || siteStatus !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setQuery("");
+              setLeadStatus("all");
+              setSiteStatus("all");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {filtered.length} of {sites.length}
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center text-sm text-muted-foreground">
+            No websites match these filters.
+          </CardContent>
+        </Card>
+      ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {sites.map((site) => (
+        {filtered.map((site) => (
           <Card key={site.id} className="flex h-full flex-col">
             <CardContent className="flex flex-1 flex-col gap-2 p-5">
               <div className="flex items-start justify-between gap-2">
@@ -110,6 +193,7 @@ export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
           </Card>
         ))}
       </div>
+      )}
 
       <WhatsAppSendDialog target={target} onOpenChange={(open) => !open && setTarget(null)} />
     </>
