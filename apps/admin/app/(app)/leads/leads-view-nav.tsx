@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Copy, Kanban, Map, Table2, Upload } from "lucide-react";
+import { Copy, Kanban, Map, Search, Table2, Upload } from "lucide-react";
 
 import { cn } from "@aiwebsite/ui";
 
@@ -10,6 +10,7 @@ const VIEWS = [
   { title: "Table", href: "/leads", icon: Table2 },
   { title: "Kanban", href: "/leads/kanban", icon: Kanban },
   { title: "Map", href: "/leads/map", icon: Map },
+  { title: "Find (Google)", href: "/leads/find", icon: Search },
   { title: "Import", href: "/leads/import", icon: Upload },
   { title: "Duplicates", href: "/leads/duplicates", icon: Copy },
 ];
