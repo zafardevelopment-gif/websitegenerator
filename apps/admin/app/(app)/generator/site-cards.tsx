@@ -93,7 +93,7 @@ export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
           <option value="all">All site statuses</option>
           {SITE_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
+              {s.charAt(0).toUpperCase() + s.slice(1)}
             </option>
           ))}
         </NativeSelect>
