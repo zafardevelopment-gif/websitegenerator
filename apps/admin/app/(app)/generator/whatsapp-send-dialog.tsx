@@ -50,12 +50,14 @@ const SECTOR_PITCHES: SectorPitch[] = [
   { test: /clinic|hospital|physio|health/i, noun: "clinic" },
 ];
 
-function pitchFor(category: string | null): SectorPitch {
+const DEFAULT_PITCH: Pick<SectorPitch, "noun" | "useDrGreeting"> = { noun: "business" };
+
+function pitchFor(category: string | null): Pick<SectorPitch, "noun" | "useDrGreeting"> {
   if (category) {
     const match = SECTOR_PITCHES.find((p) => p.test.test(category));
     if (match) return match;
   }
-  return { noun: "business" };
+  return DEFAULT_PITCH;
 }
 
 /** Default pitch text per sector — editable in the dialog before sending. */
