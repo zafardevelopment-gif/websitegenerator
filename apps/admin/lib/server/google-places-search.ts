@@ -77,6 +77,8 @@ async function getGooglePlacesKey(): Promise<string | null> {
  * Delhi"). Returns up to 20 results plus a token for the next page (Google
  * requires a short delay before that token becomes valid).
  */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function searchPlacesByText(
   query: string,
   pageToken?: string
@@ -92,10 +94,22 @@ export async function searchPlacesByText(
   }
   url.searchParams.set("key", apiKey);
 
-  const response = await fetch(url);
-  const payload = (await response.json().catch(() => ({}))) as TextSearchResponse;
+  // A fresh next_page_token isn't valid for a couple of seconds — Google
+  // returns INVALID_REQUEST until it activates, so retry briefly when
+  // paginating instead of surfacing that as an error.
+  let payload: TextSearchResponse = { status: "UNKNOWN" };
+  const attempts = pageToken ? 4 : 1;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(1200);
+    const response = await fetch(url);
+    payload = (await response.json().catch(() => ({ status: "UNKNOWN" }))) as TextSearchResponse;
+    if (payload.status !== "INVALID_REQUEST") break;
+  }
 
   if (payload.status === "ZERO_RESULTS") return { results: [], nextPageToken: null };
+  if (payload.status === "INVALID_REQUEST" && pageToken) {
+    throw new Error("Still preparing the next page — wait a moment and try \"Load more\" again.");
+  }
   if (payload.status !== "OK") {
     throw new Error(payload.error_message || `Google Places error: ${payload.status}`);
   }
