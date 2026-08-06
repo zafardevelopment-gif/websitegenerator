@@ -51,6 +51,15 @@ export interface PlaceSearchResult {
   businessStatus: string | null;
 }
 
+export class PlacesApiError extends Error {
+  retryable: boolean;
+  constructor(message: string, retryable = false) {
+    super(message);
+    this.name = "PlacesApiError";
+    this.retryable = retryable;
+  }
+}
+
 export interface PlaceLeadDetails {
   placeId: string;
   name: string;
@@ -108,11 +117,15 @@ export async function searchPlacesByText(
 
   if (payload.status === "ZERO_RESULTS") return { results: [], nextPageToken: null };
   if (payload.status === "INVALID_REQUEST" && pageToken) {
-    // Signal to the caller (searchGooglePlacesAction) that this is a
-    // transient "not ready yet" state, not a real failure — it's retried
-    // client-side too, since one server invocation can't wait forever.
-    const err = new Error("RETRYABLE_PAGE_TOKEN");
-    throw err;
+    // Surface Google's actual reason (if any) instead of guessing — this is
+    // usually a timing issue, but can also mean the key/project setup
+    // doesn't support pagination, which "wait and retry" can't fix.
+    throw new PlacesApiError(
+      payload.error_message
+        ? `Google says: ${payload.error_message}`
+        : "Google isn't returning the next page (INVALID_REQUEST) even after waiting.",
+      true
+    );
   }
   if (payload.status !== "OK") {
     throw new Error(payload.error_message || `Google Places error: ${payload.status}`);

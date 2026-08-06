@@ -9,7 +9,11 @@ import { getJsonSetting } from "@aiwebsite/db/settings";
 import { bulkInsertLeads, getDedupeKeys } from "@aiwebsite/db/repositories/leads";
 import type { Database } from "@aiwebsite/db/types";
 
-import { searchPlacesWithDetails, type EnrichedPlaceResult } from "../server/google-places-search";
+import {
+  PlacesApiError,
+  searchPlacesWithDetails,
+  type EnrichedPlaceResult,
+} from "../server/google-places-search";
 
 type LeadInsert = Database["public"]["Tables"]["aiwebsite_leads"]["Insert"];
 
@@ -60,15 +64,8 @@ export async function searchGooglePlacesAction(input: unknown): Promise<SearchGo
 
     return { ok: true, results: flagged, nextPageToken };
   } catch (e) {
-    // Google's next_page_token isn't valid for a few seconds after it's
-    // issued — our own retry loop already waited ~6s; if it's still not
-    // ready, tell the client to keep retrying instead of showing an error.
-    if (e instanceof Error && e.message === "RETRYABLE_PAGE_TOKEN") {
-      return {
-        ok: false,
-        error: "Still preparing the next page…",
-        retryable: true,
-      };
+    if (e instanceof PlacesApiError) {
+      return { ok: false, error: e.message, retryable: e.retryable };
     }
     return { ok: false, error: friendlyError(e) };
   }

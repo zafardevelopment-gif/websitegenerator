@@ -112,7 +112,7 @@ export function FindLeadsPanel() {
           await sleep(2000);
           continue;
         }
-        toast.error(result.retryable ? "Still not ready — try \"Load more\" again in a moment." : result.error);
+        toast.error(result.error);
         return;
       }
     });
