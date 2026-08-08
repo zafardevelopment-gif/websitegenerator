@@ -79,6 +79,7 @@ export function WhatsAppSendDialog({
       const result = await sendDemoPitchTemplateAction({
         leadId: target.leadId,
         demoLink: target.demoLink,
+        callNumber: target.callNumber ?? undefined,
       });
       if (result.ok) {
         toast.success(result.message);

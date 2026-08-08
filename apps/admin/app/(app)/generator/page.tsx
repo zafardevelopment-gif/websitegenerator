@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Globe } from "lucide-react";
 
 import { SETTING_KEYS } from "@aiwebsite/config";
-import { createAdminSupabase } from "@aiwebsite/db/admin";
 import { createServerSupabase } from "@aiwebsite/db/server";
 import { listSites } from "@aiwebsite/db/repositories/sites";
 import { getDecryptedSetting } from "@aiwebsite/db/settings";
@@ -37,13 +36,14 @@ export default async function GeneratorPage() {
   }
 
   const sitesUrl = sitesBaseUrl();
-  const adminSupa = createAdminSupabase();
+  // Use the user's authenticated client (same as Settings page) — admin client may
+  // lack SUPABASE_SERVICE_ROLE_KEY in some deployment environments.
   const callNumber = await getDecryptedSetting(
-    adminSupa,
+    supabase,
     SETTING_KEYS.whatsappCallbackNumber
   ).catch(() => null);
   const cloudPhoneNumberId = await getDecryptedSetting(
-    adminSupa,
+    supabase,
     SETTING_KEYS.whatsappCloudPhoneNumberId
   ).catch(() => null);
   const cloudConfigured = !!cloudPhoneNumberId;

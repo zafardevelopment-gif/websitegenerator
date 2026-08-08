@@ -78,6 +78,7 @@ export function SiteCards({
       const result = await sendDemoPitchTemplateAction({
         leadId: site.leadId,
         demoLink: site.demoLink,
+        callNumber: callNumber ?? undefined,
       });
       if (result.ok) toast.success(result.message);
       else toast.error(result.error);

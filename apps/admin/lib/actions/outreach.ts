@@ -156,6 +156,7 @@ export async function logWhatsAppSentAction(input: unknown): Promise<OutreachRes
 const sendTemplateSchema = z.object({
   leadId: z.string().uuid(),
   demoLink: z.string().url(),
+  callNumber: z.string().optional(),
 });
 
 /**
@@ -190,14 +191,12 @@ export async function sendDemoPitchTemplateAction(input: unknown): Promise<Outre
       };
     }
 
-    const callNumber = (await getWhatsAppCallbackNumber()) ?? "";
-    if (!callNumber) {
-      return {
-        ok: false,
-        error:
-          "Call-back number not set. Add it in Settings → API Keys → Meta WhatsApp Cloud API → Call-back number.",
-      };
-    }
+    // Prefer callNumber passed from the client (generator page fetches it at render time).
+    // Fall back to DB lookup so the action also works when called without it.
+    const callNumber =
+      parsed.data.callNumber?.trim() ||
+      (await getWhatsAppCallbackNumber().catch(() => null)) ||
+      "";
     const { buildDemoPitchTemplateParams, buildDemoPitchText } = await import(
       "../whatsapp-pitch"
     );
