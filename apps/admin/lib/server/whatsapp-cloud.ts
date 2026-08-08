@@ -100,7 +100,11 @@ export async function sendWhatsAppTemplate(input: SendTemplateInput): Promise<st
       components: [
         {
           type: "body",
-          parameters: input.bodyParams.map((p) => ({ type: "text", text: p.value })),
+          parameters: input.bodyParams.map((p) =>
+            p.name
+              ? { type: "text", parameter_name: p.name, text: p.value }
+              : { type: "text", text: p.value }
+          ),
         },
       ],
     },
