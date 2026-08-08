@@ -62,12 +62,17 @@ function toWaId(phone: string): string {
   return digits;
 }
 
+interface TemplateParam {
+  name?: string;
+  value: string;
+}
+
 interface SendTemplateInput {
   to: string;
   template: (typeof WHATSAPP_TEMPLATES)[keyof typeof WHATSAPP_TEMPLATES];
   languageCode?: string;
-  /** Body variables in order — must match the template's {{1}}/{{name}} placeholders. */
-  bodyParams: string[];
+  /** Body variables — use {name, value} objects for named-variable templates ({{name}} syntax). */
+  bodyParams: TemplateParam[];
 }
 
 interface CloudSendResponse {
@@ -95,7 +100,11 @@ export async function sendWhatsAppTemplate(input: SendTemplateInput): Promise<st
       components: [
         {
           type: "body",
-          parameters: input.bodyParams.map((text) => ({ type: "text", text })),
+          parameters: input.bodyParams.map((p) =>
+            p.name
+              ? { type: "text", parameter_name: p.name, text: p.value }
+              : { type: "text", text: p.value }
+          ),
         },
       ],
     },

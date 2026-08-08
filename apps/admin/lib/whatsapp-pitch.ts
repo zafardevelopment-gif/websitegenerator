@@ -61,9 +61,15 @@ export function buildDemoPitchText({
   ].join("\n");
 }
 
+/** A single template body parameter — use {name} for named-variable templates ({{name}} syntax). */
+export interface TemplateParam {
+  name?: string;
+  value: string;
+}
+
 /**
- * Body variables for the approved `demo_pitch_intro` Meta template, in
- * order: {{name}}, {{business_type}}, {{demo_link}}, {{call_number}}.
+ * Body variables for the approved `demo_pitch_intro` Meta template.
+ * Named variables: {{name}}, {{business_type}}, {{demo_link}}, {{call_number}}.
  */
 export function buildDemoPitchTemplateParams({
   ownerName,
@@ -75,14 +81,19 @@ export function buildDemoPitchTemplateParams({
   category: string | null;
   demoLink: string;
   callNumber: string;
-}): string[] {
+}): TemplateParam[] {
   const { noun } = pitchFor(category);
-  return [ownerName?.trim() || "there", noun, demoLink, callNumber];
+  return [
+    { name: "name", value: ownerName?.trim() || "there" },
+    { name: "business_type", value: noun },
+    { name: "demo_link", value: demoLink },
+    { name: "call_number", value: callNumber },
+  ];
 }
 
 /**
- * Body variables for the approved `reply_team_followup` Meta template, in
- * order: {{name}}, {{business_type}}, {{call_number}}.
+ * Body variables for the approved `reply_team_followup` Meta template.
+ * Named variables: {{name}}, {{business_type}}, {{call_number}}.
  */
 export function buildReplyFollowupTemplateParams({
   ownerName,
@@ -92,7 +103,11 @@ export function buildReplyFollowupTemplateParams({
   ownerName: string | null;
   category: string | null;
   callNumber: string;
-}): string[] {
+}): TemplateParam[] {
   const { noun } = pitchFor(category);
-  return [ownerName?.trim() || "there", noun, callNumber];
+  return [
+    { name: "name", value: ownerName?.trim() || "there" },
+    { name: "business_type", value: noun },
+    { name: "call_number", value: callNumber },
+  ];
 }
