@@ -197,6 +197,13 @@ export async function sendDemoPitchTemplateAction(input: unknown): Promise<Outre
       parsed.data.callNumber?.trim() ||
       (await getWhatsAppCallbackNumber().catch(() => null)) ||
       "";
+    if (!callNumber) {
+      return {
+        ok: false,
+        error:
+          "Call-back number not set. Add it in Settings → API Keys → WhatsApp Call-back Number, then try again.",
+      };
+    }
     const { buildDemoPitchTemplateParams, buildDemoPitchText } = await import(
       "../whatsapp-pitch"
     );
