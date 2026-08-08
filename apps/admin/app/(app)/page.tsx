@@ -4,11 +4,16 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
-  Circle,
+  ChevronRight,
+  ExternalLink,
   Flame,
+  Globe,
   MessageCircle,
   MessageCircleReply,
   Percent,
+  TrendingUp,
+  Users,
+  Zap,
 } from "lucide-react";
 
 import { SETTING_KEYS } from "@aiwebsite/config";
@@ -24,6 +29,7 @@ import {
 } from "@aiwebsite/db/repositories/messages";
 import { getAgencyProfile, getSettingsStatus } from "@aiwebsite/db/settings";
 import { listHotLeads, type HotLeadRow } from "@aiwebsite/db/repositories/tracking";
+import { listSites } from "@aiwebsite/db/repositories/sites";
 import type { LeadStatus } from "@aiwebsite/db/types";
 import { getUserProfile } from "@aiwebsite/db/users";
 
@@ -38,33 +44,28 @@ import {
   CardHeader,
   CardTitle,
   cn,
-  Separator,
 } from "@aiwebsite/ui";
 import { formatRelative } from "@/lib/format";
 
-const FUNNEL_SUMMARY: LeadStatus[] = [
+const PIPELINE_STAGES: LeadStatus[] = [
   "new",
   "website_generated",
   "whatsapp_sent",
   "demo_viewed",
   "interested",
+  "meeting",
   "won",
 ];
 
-interface ChecklistItem {
-  label: string;
-  done: boolean;
-  href: string | null;
-  hint: string;
-}
-
-const ROADMAP: { phase: string; label: string; status: "done" | "current" | "next" }[] = [
-  { phase: "0–9", label: "Foundation → templates → AI → generator → media → deploy", status: "done" },
-  { phase: "10", label: "Demo engagement tracking + hot leads + notifications", status: "current" },
-  { phase: "11–12", label: "Outreach suite, follow-up manager", status: "next" },
-  { phase: "13–14", label: "Analytics, health scores, conversion & payments", status: "next" },
-  { phase: "15", label: "Hardening & launch", status: "next" },
-];
+const STAGE_COLORS: Record<string, string> = {
+  new: "bg-slate-400",
+  website_generated: "bg-blue-500",
+  whatsapp_sent: "bg-violet-500",
+  demo_viewed: "bg-amber-500",
+  interested: "bg-orange-500",
+  meeting: "bg-rose-500",
+  won: "bg-emerald-500",
+};
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
@@ -73,12 +74,15 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   const profile = user ? await getUserProfile(supabase, user.id) : null;
   const agency = await getAgencyProfile(supabase);
+
   const keys = await getSettingsStatus(supabase, [
     SETTING_KEYS.anthropicApiKey,
     SETTING_KEYS.geminiApiKey,
+    SETTING_KEYS.whatsappCloudPhoneNumberId,
+    SETTING_KEYS.whatsappCloudAccessToken,
+    SETTING_KEYS.whatsappCloudVerifyToken,
   ]);
 
-  // AI spend this month (tolerates the table not existing yet).
   let aiCost: AiMonthlyCost | null = null;
   let aiBudget = 0;
   try {
@@ -90,295 +94,359 @@ export default async function DashboardPage() {
   const budgetUsed = aiCost && aiBudget > 0 ? aiCost.totalCostInr / aiBudget : 0;
 
   let hotLeads: HotLeadRow[] = [];
-  try {
-    hotLeads = await listHotLeads(supabase, 48, 8);
-  } catch {
-    hotLeads = [];
-  }
-
   let waStats: WhatsAppStats | null = null;
   let recentReplies: RecentReply[] = [];
   let funnelCounts: Record<LeadStatus, number> | null = null;
+  let allSites: Awaited<ReturnType<typeof listSites>> = [];
+
   try {
-    [waStats, recentReplies, funnelCounts] = await Promise.all([
+    [hotLeads, waStats, recentReplies, funnelCounts, allSites] = await Promise.all([
+      listHotLeads(supabase, 48, 5),
       getWhatsAppStats(supabase, 30),
-      listRecentWhatsAppReplies(supabase, 6),
+      listRecentWhatsAppReplies(supabase, 5),
       countLeadsByStatus(supabase),
+      listSites(supabase, {}, 1000),
     ]);
   } catch {
+    hotLeads = [];
     waStats = null;
     recentReplies = [];
     funnelCounts = null;
+    allSites = [];
   }
 
-  const checklist: ChecklistItem[] = [
-    {
-      label: "Database migration applied & signed in",
-      done: true, // being here with a profile row proves both
-      href: null,
-      hint: "Done — your team row exists.",
-    },
-    {
-      label: "Fill in the agency profile",
-      done: agency.name.trim() !== "",
-      href: "/settings",
-      hint: "Name, WhatsApp and address appear on demo banners, proposals and PDFs.",
-    },
-    {
-      label: "Encryption key configured",
-      done: isEncryptionConfigured(),
-      href: null,
-      hint: "SETTINGS_ENCRYPTION_KEY in apps/admin/.env.local — protects stored API keys.",
-    },
-    {
-      label: "Add an AI provider key (used from Phase 6)",
-      done: (keys[SETTING_KEYS.anthropicApiKey]?.isSet ?? false) ||
-        (keys[SETTING_KEYS.geminiApiKey]?.isSet ?? false),
-      href: "/settings/api-keys",
-      hint: "Claude is the primary content engine; Gemini is the fallback.",
-    },
-  ];
+  const totalLeads = funnelCounts
+    ? Object.values(funnelCounts).reduce((a, b) => a + b, 0)
+    : 0;
+  const wonLeads = funnelCounts?.won ?? 0;
+  const interestedLeads = funnelCounts?.interested ?? 0;
+  const liveSites = allSites.filter((s) => s.status === "live").length;
+  const totalSites = allSites.length;
+  const conversionRate = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0;
 
-  const displayName = profile?.full_name?.trim() || profile?.email || "there";
+  const cloudConfigured =
+    (keys[SETTING_KEYS.whatsappCloudPhoneNumberId]?.isSet ?? false) &&
+    (keys[SETTING_KEYS.whatsappCloudAccessToken]?.isSet ?? false);
+  const webhookConfigured = keys[SETTING_KEYS.whatsappCloudVerifyToken]?.isSet ?? false;
+
+  const displayName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "there";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome, {displayName}</h1>
-        <p className="text-sm text-muted-foreground">
-          Foundation is live. KPI cards, hot leads and activity land here as their modules ship.
-        </p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {greeting}, {displayName} 👋
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {agency.name || "AIVEXA"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link
+            href="/leads/new"
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            <Users className="h-3.5 w-3.5" /> New lead
+          </Link>
+          <Link
+            href="/generator"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Globe className="h-3.5 w-3.5" /> Generator
+          </Link>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Flame className="h-4 w-4 text-destructive" />
-            Hot leads
-          </CardTitle>
-          <CardDescription>Demos viewed in the last 48 hours, ranked by view count.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {hotLeads.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No demo views in the last 48 hours yet — once a demo goes live and gets viewed,
-              it&apos;ll show up here first.
-            </p>
-          ) : (
-            <div className="divide-y">
-              {hotLeads.map((hot) => (
-                <div key={hot.siteId} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/leads/${hot.leadId}`}
-                      className="truncate font-medium hover:text-primary hover:underline"
-                    >
-                      {hot.businessName}
-                    </Link>
-                    <p className="text-xs text-muted-foreground">
-                      Last viewed {formatRelative(hot.lastViewedAt)}
-                    </p>
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          {
+            label: "Total leads",
+            value: totalLeads,
+            sub: `${interestedLeads} interested`,
+            icon: Users,
+            href: "/leads",
+            color: "text-blue-500",
+          },
+          {
+            label: "Sites built",
+            value: totalSites,
+            sub: `${liveSites} live`,
+            icon: Globe,
+            href: "/generator",
+            color: "text-violet-500",
+          },
+          {
+            label: "WA sent (30d)",
+            value: waStats?.sent ?? 0,
+            sub: `${waStats?.repliedLeads ?? 0} replied`,
+            icon: MessageCircle,
+            href: "/outreach",
+            color: "text-green-500",
+          },
+          {
+            label: "Won",
+            value: wonLeads,
+            sub: `${conversionRate}% conv. rate`,
+            icon: TrendingUp,
+            href: "/leads?status=won",
+            color: "text-emerald-500",
+          },
+        ].map((kpi) => (
+          <Link key={kpi.label} href={kpi.href}>
+            <Card className="cursor-pointer transition-shadow hover:shadow-md">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{kpi.value}</p>
+                    <p className="text-xs text-muted-foreground">{kpi.sub}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant="warning">
-                      {hot.viewCount} view{hot.viewCount === 1 ? "" : "s"}
-                    </Badge>
-                    <a
-                      href={demoUrl(hot.slug)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-primary hover:underline"
-                    >
-                      View demo
-                    </a>
-                  </div>
+                  <kpi.icon className={cn("h-5 w-5 shrink-0", kpi.color)} />
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Main content */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Pipeline funnel */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Lead pipeline</CardTitle>
+              <Link href="/leads" className="flex items-center gap-0.5 text-xs text-primary hover:underline">
+                View all <ChevronRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {funnelCounts === null ? (
+              <p className="text-sm text-muted-foreground">No lead data yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {PIPELINE_STAGES.map((status) => {
+                  const count = funnelCounts?.[status] ?? 0;
+                  const max = Math.max(1, ...PIPELINE_STAGES.map((s) => funnelCounts?.[s] ?? 0));
+                  const pct = Math.round((count / max) * 100);
+                  return (
+                    <Link key={status} href={`/leads?status=${status}`} className="block">
+                      <div className="flex items-center gap-3 rounded-md px-1 py-0.5 hover:bg-muted/50">
+                        <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
+                          {LEAD_STATUS_LABELS[status]}
+                        </span>
+                        <div className="relative h-5 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={cn("h-full rounded-full transition-all", STAGE_COLORS[status] ?? "bg-primary")}
+                            style={{ width: `${pct}%` }}
+                          />
+                          {count > 0 && (
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-medium text-white">
+                              {count}
+                            </span>
+                          )}
+                        </div>
+                        <span className="w-7 shrink-0 text-right text-xs font-semibold tabular-nums">
+                          {count}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quick actions */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageCircle className="h-4 w-4 text-success" />
-              WhatsApp outreach
-              <Badge variant="outline" className="ml-auto text-[10px]">
-                Last 30 days
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Auto-sent on generate via Meta Cloud API, plus manual sends from the generator page.
-            </CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Quick actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {[
+              { label: "Generate a website", icon: Globe, href: "/generator", desc: "Lead → site in 3 min" },
+              { label: "Send WhatsApp blast", icon: Zap, href: "/generator", desc: "Use ⚡ on any card" },
+              { label: "View follow-ups", icon: MessageCircleReply, href: "/follow-ups", desc: "Pending callbacks" },
+              { label: "Find new leads", icon: Users, href: "/leads?tab=find", desc: "Google Maps scraper" },
+              { label: "Analytics", icon: TrendingUp, href: "/analytics", desc: "Full funnel data" },
+            ].map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                className="flex items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/50 transition-colors"
+              >
+                <action.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium leading-none">{action.label}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{action.desc}</p>
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Hot leads */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Flame className="h-4 w-4 text-destructive" />
+                Hot leads
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">Last 48h</span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {hotLeads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No demo views in the last 48 hours yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {hotLeads.map((hot) => (
+                  <div key={hot.siteId} className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/leads/${hot.leadId}`}
+                        className="truncate text-sm font-medium hover:text-primary hover:underline block"
+                      >
+                        {hot.businessName}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">{formatRelative(hot.lastViewedAt)}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Badge variant="warning" className="text-[10px]">
+                        {hot.viewCount}×
+                      </Badge>
+                      <a
+                        href={demoUrl(hot.slug)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* WhatsApp */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MessageCircle className="h-4 w-4 text-green-500" />
+                WhatsApp (30 days)
+              </CardTitle>
+              {!cloudConfigured && (
+                <Link href="/settings/api-keys" className="text-xs text-destructive hover:underline">
+                  Cloud API not set up →
+                </Link>
+              )}
+              {cloudConfigured && !webhookConfigured && (
+                <Link href="/settings/api-keys" className="text-xs text-amber-500 hover:underline">
+                  Webhook not configured →
+                </Link>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {waStats === null ? (
-              <p className="text-sm text-muted-foreground">
-                No WhatsApp activity yet — messages will show up here once you generate a site or
-                send from a lead.
-              </p>
+              <p className="text-sm text-muted-foreground">No WhatsApp activity yet.</p>
             ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="space-y-4">
+                <div className="grid grid-cols-5 gap-2">
                   {[
                     { label: "Sent", value: waStats.sent },
                     { label: "Delivered", value: waStats.delivered },
                     { label: "Read", value: waStats.read },
                     { label: "Replied", value: waStats.repliedLeads },
                     { label: "Failed", value: waStats.failed },
-                  ].map((stat) => (
-                    <div key={stat.label} className="rounded-md border p-2.5 text-center">
-                      <p className="text-xl font-semibold tabular-nums">{stat.value}</p>
-                      <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-lg border p-2 text-center">
+                      <p className="text-xl font-bold tabular-nums">{s.value}</p>
+                      <p className="text-[10px] text-muted-foreground">{s.label}</p>
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center gap-1.5 text-sm">
+
+                <div className="flex items-center gap-2 text-sm">
                   <Percent className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium tabular-nums">
-                    {Math.round(waStats.replyRate * 100)}%
-                  </span>
+                  <span className="font-semibold tabular-nums">{Math.round(waStats.replyRate * 100)}%</span>
                   <span className="text-muted-foreground">reply rate</span>
                 </div>
 
-                {recentReplies.length > 0 && (
-                  <div className="mt-4 space-y-2 border-t pt-3">
-                    <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                      <MessageCircleReply className="h-3.5 w-3.5" />
-                      Recent replies
-                    </p>
+                {recentReplies.length > 0 ? (
+                  <div className="space-y-1 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Recent replies</p>
                     {recentReplies.map((reply) => (
                       <Link
                         key={reply.id}
                         href={`/leads/${reply.leadId}`}
-                        className="block rounded-md p-1.5 text-sm hover:bg-muted"
+                        className="group flex items-start justify-between gap-2 rounded-md p-1.5 hover:bg-muted cursor-pointer"
                       >
-                        <span className="font-medium">{reply.businessName}</span>
-                        <span className="text-muted-foreground"> · {formatRelative(reply.createdAt)}</span>
-                        <p className="truncate text-xs text-muted-foreground">{reply.body}</p>
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium group-hover:text-primary group-hover:underline">{reply.businessName}</span>
+                          <p className="truncate text-xs text-muted-foreground">{reply.body}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground">{formatRelative(reply.createdAt)}</span>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                       </Link>
                     ))}
                   </div>
+                ) : (
+                  <p className="border-t pt-3 text-xs text-muted-foreground">
+                    {webhookConfigured
+                      ? "No replies captured yet — replies will auto-appear once a lead responds."
+                      : "Configure the Meta webhook in Settings to capture replies automatically."}
+                  </p>
                 )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Pipeline snapshot</CardTitle>
-            <CardDescription>Leads at each stage right now.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {funnelCounts === null ? (
-              <p className="text-sm text-muted-foreground">No lead data yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {FUNNEL_SUMMARY.map((status) => {
-                  const count = funnelCounts?.[status] ?? 0;
-                  const max = Math.max(1, ...FUNNEL_SUMMARY.map((s) => funnelCounts?.[s] ?? 0));
-                  return (
-                    <div key={status} className="flex items-center gap-3">
-                      <span className="w-32 shrink-0 truncate text-xs text-muted-foreground">
-                        {LEAD_STATUS_LABELS[status]}
-                      </span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary"
-                          style={{ width: `${(count / max) * 100}%` }}
-                        />
-                      </div>
-                      <span className="w-8 shrink-0 text-right text-xs font-medium tabular-nums">
-                        {count}
-                      </span>
-                    </div>
-                  );
-                })}
-                <Link
-                  href="/analytics"
-                  className="inline-flex items-center gap-1 pt-1 text-xs font-medium text-primary hover:underline"
-                >
-                  Full funnel &amp; analytics <ArrowRight className="h-3 w-3" />
-                </Link>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* AI cost + status row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Setup checklist</CardTitle>
-            <CardDescription>Get the workspace production-ready.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {checklist.map((item, i) => (
-              <div key={item.label}>
-                {i > 0 && <Separator className="my-3" />}
-                <div className="flex items-start gap-3">
-                  {item.done ? (
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-                  ) : (
-                    <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground/40" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-sm font-medium", item.done && "text-muted-foreground")}>
-                      {item.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{item.hint}</p>
-                  </div>
-                  {!item.done && item.href && (
-                    <Link
-                      href={item.href}
-                      className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      Fix <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Bot className="h-4 w-4 text-muted-foreground" />
-              AI cost this month
+              AI spend this month
             </CardTitle>
-            <CardDescription>
-              Every AI call is logged with tokens and a ₹ estimate.
-            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             {aiCost === null ? (
-              <p className="text-sm text-muted-foreground">
-                No usage data yet — configure keys in Settings → AI and run a test.
-              </p>
+              <p className="text-sm text-muted-foreground">No AI usage yet.</p>
             ) : (
-              <>
+              <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-semibold tabular-nums">
-                    ₹{aiCost.totalCostInr.toFixed(2)}
-                  </span>
+                  <span className="text-3xl font-bold tabular-nums">₹{aiCost.totalCostInr.toFixed(2)}</span>
                   {aiBudget > 0 && (
-                    <span className="text-sm text-muted-foreground">
-                      of ₹{aiBudget.toLocaleString("en-IN")} budget
-                    </span>
+                    <span className="text-sm text-muted-foreground">of ₹{aiBudget.toLocaleString("en-IN")}</span>
                   )}
                 </div>
                 {aiBudget > 0 && (
                   <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={cn(
-                        "h-full rounded-full transition-all",
-                        budgetUsed >= 0.8 ? "bg-destructive" : "bg-primary"
-                      )}
+                      className={cn("h-full rounded-full", budgetUsed >= 0.8 ? "bg-destructive" : "bg-primary")}
                       style={{ width: `${Math.min(100, budgetUsed * 100)}%` }}
                     />
                   </div>
@@ -386,41 +454,50 @@ export default async function DashboardPage() {
                 {budgetUsed >= 0.8 && (
                   <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
                     <AlertTriangle className="h-4 w-4" />
-                    {Math.round(budgetUsed * 100)}% of the monthly AI budget used
+                    {Math.round(budgetUsed * 100)}% of budget used
                   </p>
                 )}
-                <p className="text-sm text-muted-foreground">
-                  {aiCost.calls} call{aiCost.calls === 1 ? "" : "s"} ·{" "}
-                  {aiCost.totalTokensIn.toLocaleString()} tokens in ·{" "}
-                  {aiCost.totalTokensOut.toLocaleString()} tokens out
+                <p className="text-xs text-muted-foreground">
+                  {aiCost.calls} calls · {aiCost.totalTokensIn.toLocaleString()} in · {aiCost.totalTokensOut.toLocaleString()} out
                 </p>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Build roadmap</CardTitle>
-            <CardDescription>Where we are in the phase plan.</CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">System status</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {ROADMAP.map((step) => (
-              <div key={step.phase} className="flex items-center gap-3">
-                <Badge
-                  variant={step.status === "current" ? "default" : "outline"}
-                  className="w-14 justify-center font-mono text-[10px]"
-                >
-                  P{step.phase}
-                </Badge>
-                <p
+          <CardContent className="space-y-2.5">
+            {[
+              { label: "Encryption", done: isEncryptionConfigured(), hint: "API key storage secure" },
+              { label: "Agency profile", done: agency.name.trim() !== "", href: "/settings", hint: "Shown on proposals" },
+              { label: "WhatsApp Cloud API", done: cloudConfigured, href: "/settings/api-keys", hint: "Auto-send templates" },
+              { label: "Inbound webhook", done: webhookConfigured, href: "/settings/api-keys", hint: "Capture lead replies" },
+              {
+                label: "AI provider",
+                done: (keys[SETTING_KEYS.anthropicApiKey]?.isSet ?? false) || (keys[SETTING_KEYS.geminiApiKey]?.isSet ?? false),
+                href: "/settings/api-keys",
+                hint: "Claude / Gemini content engine",
+              },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3">
+                <CheckCircle2
                   className={cn(
-                    "text-sm",
-                    step.status === "current" ? "font-medium" : "text-muted-foreground"
+                    "h-4 w-4 shrink-0",
+                    item.done ? "text-emerald-500" : "text-muted-foreground/30"
                   )}
-                >
-                  {step.label}
-                </p>
+                />
+                <div className="flex-1 min-w-0">
+                  <span className={cn("text-sm", !item.done && "text-muted-foreground")}>{item.label}</span>
+                  <p className="text-xs text-muted-foreground">{item.hint}</p>
+                </div>
+                {!item.done && item.href && (
+                  <Link href={item.href} className="shrink-0 text-xs text-primary hover:underline">
+                    Setup →
+                  </Link>
+                )}
               </div>
             ))}
           </CardContent>
