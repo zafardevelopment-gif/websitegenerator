@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ExternalLink, MessageCircle, Pencil, Search, User } from "lucide-react";
+import { ExternalLink, Loader2, MessageCircle, Pencil, Search, User, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 import type { LeadStatus, SiteStatus } from "@aiwebsite/db/types";
 import { Badge, Button, Card, CardContent, Input, NativeSelect } from "@aiwebsite/ui";
@@ -10,6 +11,7 @@ import { Badge, Button, Card, CardContent, Input, NativeSelect } from "@aiwebsit
 import { LeadStatusBadge } from "@/components/lead-badges";
 import { formatRelative } from "@/lib/format";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/lead-meta";
+import { sendDemoPitchTemplateAction } from "@/lib/actions/outreach";
 
 import { WhatsAppSendDialog, type WhatsAppTarget } from "./whatsapp-send-dialog";
 
@@ -41,11 +43,14 @@ export type GeneratorSiteCard = {
 export function SiteCards({
   sites,
   callNumber,
+  cloudConfigured,
 }: {
   sites: GeneratorSiteCard[];
   callNumber?: string | null;
+  cloudConfigured?: boolean;
 }) {
   const [target, setTarget] = React.useState<WhatsAppTarget | null>(null);
+  const [sendingLeadId, setSendingLeadId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [leadStatus, setLeadStatus] = React.useState<LeadStatus | "all">("all");
   const [siteStatus, setSiteStatus] = React.useState<SiteStatus | "all">("all");
@@ -65,6 +70,21 @@ export function SiteCards({
       return true;
     });
   }, [sites, query, leadStatus, siteStatus]);
+
+  async function sendViaTemplate(site: GeneratorSiteCard) {
+    if (!site.phone || sendingLeadId) return;
+    setSendingLeadId(site.leadId);
+    try {
+      const result = await sendDemoPitchTemplateAction({
+        leadId: site.leadId,
+        demoLink: site.demoLink,
+      });
+      if (result.ok) toast.success(result.message);
+      else toast.error(result.error);
+    } finally {
+      setSendingLeadId(null);
+    }
+  }
 
   return (
     <>
@@ -181,12 +201,29 @@ export function SiteCards({
                       demoLink: site.demoLink,
                       category: site.category,
                       callNumber,
+                      cloudConfigured,
                     })
                   }
                 >
                   <MessageCircle />
                   WhatsApp
                 </Button>
+                {cloudConfigured && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-green-500/40 text-green-700 hover:bg-green-500/10 dark:text-green-400"
+                    disabled={!site.phone || sendingLeadId !== null}
+                    title={site.phone ? "Send demo_pitch_intro via Meta Cloud API" : "No WhatsApp number on this lead"}
+                    onClick={() => sendViaTemplate(site)}
+                  >
+                    {sendingLeadId === site.leadId ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" asChild>
                   <a href={site.demoLink} target="_blank" rel="noreferrer" title="Open demo">
                     <ExternalLink />

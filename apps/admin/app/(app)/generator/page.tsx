@@ -37,10 +37,16 @@ export default async function GeneratorPage() {
   }
 
   const sitesUrl = sitesBaseUrl();
+  const adminSupa = createAdminSupabase();
   const callNumber = await getDecryptedSetting(
-    createAdminSupabase(),
+    adminSupa,
     SETTING_KEYS.whatsappCallbackNumber
   ).catch(() => null);
+  const cloudPhoneNumberId = await getDecryptedSetting(
+    adminSupa,
+    SETTING_KEYS.whatsappCloudPhoneNumberId
+  ).catch(() => null);
+  const cloudConfigured = !!cloudPhoneNumberId;
 
   const cards: GeneratorSiteCard[] = sites.map((site) => {
     const lead = leadsById.get(site.lead_id);
@@ -85,7 +91,7 @@ export default async function GeneratorPage() {
           </CardContent>
         </Card>
       ) : (
-        <SiteCards sites={cards} callNumber={callNumber} />
+        <SiteCards sites={cards} callNumber={callNumber} cloudConfigured={cloudConfigured} />
       )}
     </div>
   );

@@ -151,6 +151,102 @@ export async function logWhatsAppSentAction(input: unknown): Promise<OutreachRes
   }
 }
 
+// ── Send via Meta Cloud API template ────────────────────────────────
+
+const sendTemplateSchema = z.object({
+  leadId: z.string().uuid(),
+  demoLink: z.string().url(),
+});
+
+/**
+ * Sends the approved `demo_pitch_intro` template directly via the Meta
+ * WhatsApp Cloud API — no WhatsApp web / app needed. Returns an error if the
+ * Cloud API credentials haven't been configured in Settings → API Keys.
+ */
+export async function sendDemoPitchTemplateAction(input: unknown): Promise<OutreachResult> {
+  const parsed = sendTemplateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request" };
+
+  try {
+    const { supabase, user } = await requireUser();
+    const lead = await getLead(supabase, parsed.data.leadId);
+    if (!lead) return { ok: false, error: "Lead not found" };
+
+    const phone = lead.whatsapp ?? lead.phone;
+    if (!phone) return { ok: false, error: "This lead has no WhatsApp / phone number." };
+
+    const {
+      isWhatsAppCloudConfigured,
+      getWhatsAppCallbackNumber,
+      sendWhatsAppTemplate,
+      WHATSAPP_TEMPLATES,
+    } = await import("../server/whatsapp-cloud");
+
+    if (!(await isWhatsAppCloudConfigured())) {
+      return {
+        ok: false,
+        error:
+          "Meta WhatsApp Cloud API is not configured. Add the Phone Number ID and access token in Settings → API Keys.",
+      };
+    }
+
+    const callNumber = (await getWhatsAppCallbackNumber()) ?? "";
+    const { buildDemoPitchTemplateParams, buildDemoPitchText } = await import(
+      "../whatsapp-pitch"
+    );
+
+    const messageId = await sendWhatsAppTemplate({
+      to: phone,
+      template: WHATSAPP_TEMPLATES.demoPitch,
+      bodyParams: buildDemoPitchTemplateParams({
+        ownerName: lead.owner_name,
+        category: lead.category,
+        demoLink: parsed.data.demoLink,
+        callNumber,
+      }),
+    });
+
+    await createMessage(supabase, {
+      lead_id: lead.id,
+      channel: "whatsapp",
+      body: buildDemoPitchText({
+        ownerName: lead.owner_name,
+        category: lead.category,
+        demoLink: parsed.data.demoLink,
+        callNumber,
+      }),
+      status: "sent",
+      direction: "outbound",
+      external_id: messageId,
+      sent_at: new Date().toISOString(),
+      created_by: user.id,
+    });
+
+    await logLeadActivity(
+      supabase,
+      lead.id,
+      "message_sent",
+      "WhatsApp demo pitch sent via Meta Cloud API",
+      { channel: "whatsapp", template: WHATSAPP_TEMPLATES.demoPitch, auto: false },
+      user.id
+    );
+
+    if (
+      lead.status === "new" ||
+      lead.status === "website_generated" ||
+      lead.status === "demo_deployed"
+    ) {
+      await setLeadStatus(supabase, lead.id, "whatsapp_sent");
+    }
+
+    revalidatePath(`/leads/${lead.id}`);
+    revalidatePath("/generator");
+    return { ok: true, message: "Template sent via Meta Cloud API ✓" };
+  } catch (e) {
+    return { ok: false, error: friendly(e) };
+  }
+}
+
 // ── Email ────────────────────────────────────────────────────────────
 
 const emailDraftSchema = z.object({
