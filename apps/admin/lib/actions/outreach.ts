@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { buildOutreachVariables, fillTemplate, personalizeWhatsAppPitch } from "@aiwebsite/ai";
+import { SETTING_KEYS } from "@aiwebsite/config";
 import { createServerSupabase } from "@aiwebsite/db/server";
-import { getAgencyProfile } from "@aiwebsite/db/settings";
+import { getAgencyProfile, getDecryptedSetting } from "@aiwebsite/db/settings";
 import { getLead, logLeadActivity, setLeadStatus } from "@aiwebsite/db/repositories/leads";
 import {
   getMessageTemplate,
@@ -178,7 +179,6 @@ export async function sendDemoPitchTemplateAction(input: unknown): Promise<Outre
 
     const {
       isWhatsAppCloudConfigured,
-      getWhatsAppCallbackNumber,
       sendWhatsAppTemplate,
       WHATSAPP_TEMPLATES,
     } = await import("../server/whatsapp-cloud");
@@ -192,10 +192,10 @@ export async function sendDemoPitchTemplateAction(input: unknown): Promise<Outre
     }
 
     // Prefer callNumber passed from the client (generator page fetches it at render time).
-    // Fall back to DB lookup so the action also works when called without it.
+    // Fall back to the user-auth DB client (same client the Settings page uses).
     const callNumber =
       parsed.data.callNumber?.trim() ||
-      (await getWhatsAppCallbackNumber().catch(() => null)) ||
+      (await getDecryptedSetting(supabase, SETTING_KEYS.whatsappCallbackNumber).catch(() => null)) ||
       "";
     if (!callNumber) {
       return {
