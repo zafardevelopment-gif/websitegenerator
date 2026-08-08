@@ -23,6 +23,7 @@ import {
   getSiteVersion,
   setCurrentVersion,
 } from "@aiwebsite/db/repositories/site-versions";
+import { createMessage } from "@aiwebsite/db/repositories/messages";
 import { createTemplate, getTemplateByKey } from "@aiwebsite/db/repositories/templates";
 import type { DbClient, Json, LeadRow } from "@aiwebsite/db/types";
 import {
@@ -38,6 +39,14 @@ import { buildAiEngine } from "../server/ai-engine";
 import { applyGooglePhotos, fetchAndUploadGooglePhotos } from "../server/google-photo-fill";
 import { buildMapUrls, leadToFacts } from "../server/lead-facts";
 import { fillContentImages } from "../server/stock-fill";
+import {
+  getWhatsAppCallbackNumber,
+  isWhatsAppCloudConfigured,
+  sendWhatsAppTemplate,
+  WHATSAPP_TEMPLATES,
+} from "../server/whatsapp-cloud";
+import { sitesBaseUrl } from "../urls";
+import { buildDemoPitchTemplateParams, buildDemoPitchText } from "../whatsapp-pitch";
 
 export type GeneratorResult<T = undefined> =
   | { ok: true; message: string; data?: T }
@@ -107,6 +116,67 @@ async function ensureTemplateRow(db: DbClient, templateKey: string): Promise<str
     layout_variants: def.layoutVariants.map((v) => v.key) as unknown as Json,
   });
   return created.id;
+}
+
+/**
+ * Fires the approved `demo_pitch_intro` template on WhatsApp right after a
+ * site is generated. No-ops quietly if Cloud API isn't configured, the lead
+ * has no phone, or the template isn't approved yet — the caller treats any
+ * failure here as non-fatal.
+ */
+async function autoSendDemoPitch(
+  db: DbClient,
+  lead: LeadRow,
+  siteId: string,
+  slug: string,
+  userId: string
+): Promise<void> {
+  const phone = lead.whatsapp ?? lead.phone;
+  if (!phone) return;
+  if (!(await isWhatsAppCloudConfigured())) return;
+
+  const callNumber = (await getWhatsAppCallbackNumber()) ?? "";
+  const demoLink = `${sitesBaseUrl()}/preview/site/${siteId}`;
+
+  const messageId = await sendWhatsAppTemplate({
+    to: phone,
+    template: WHATSAPP_TEMPLATES.demoPitch,
+    bodyParams: buildDemoPitchTemplateParams({
+      ownerName: lead.owner_name,
+      category: lead.category,
+      demoLink,
+      callNumber,
+    }),
+  });
+
+  await createMessage(db, {
+    lead_id: lead.id,
+    channel: "whatsapp",
+    body: buildDemoPitchText({
+      ownerName: lead.owner_name,
+      category: lead.category,
+      demoLink,
+      callNumber,
+    }),
+    status: "sent",
+    direction: "outbound",
+    external_id: messageId,
+    sent_at: new Date().toISOString(),
+    created_by: userId,
+  });
+
+  await logLeadActivity(
+    db,
+    lead.id,
+    "message_sent",
+    "WhatsApp demo pitch auto-sent",
+    { channel: "whatsapp", auto: true, site_id: siteId, slug },
+    userId
+  );
+
+  if (lead.status === "new" || lead.status === "website_generated" || lead.status === "demo_deployed") {
+    await setLeadStatus(db, lead.id, "whatsapp_sent");
+  }
 }
 
 // ── Generate a new website ──────────────────────────────────────────
@@ -224,6 +294,13 @@ export async function generateWebsiteAction(
     if (lead.status === "new") {
       await setLeadStatus(supabase, lead.id, "website_generated");
     }
+
+    // Auto-send the demo pitch on WhatsApp — best effort: a missing/unapproved
+    // Meta template or unconfigured Cloud API must never fail the generation
+    // itself, since the site row above is already committed.
+    await autoSendDemoPitch(supabase, lead, site.id, slug, user.id).catch((e) => {
+      console.error("Auto WhatsApp send failed:", e);
+    });
 
     revalidatePath("/generator");
     revalidatePath(`/leads/${lead.id}`);

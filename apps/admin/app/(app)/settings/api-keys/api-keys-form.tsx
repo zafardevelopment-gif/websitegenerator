@@ -105,6 +105,35 @@ const GROUPS: GroupDef[] = [
       },
     ],
   },
+  {
+    title: "Meta WhatsApp Cloud API",
+    description:
+      "Sends the demo pitch automatically when a site is generated, and receives replies natively (no n8n needed). Get the Phone Number ID + token from Meta for Developers → your WhatsApp app → API Setup. Set the webhook callback URL to /api/webhooks/whatsapp-meta with the verify token below.",
+    phase: "16",
+    fields: [
+      {
+        name: "whatsapp_cloud_phone_number_id",
+        label: "Phone Number ID",
+        secret: false,
+      },
+      {
+        name: "whatsapp_cloud_access_token",
+        label: "Permanent access token",
+        secret: true,
+      },
+      {
+        name: "whatsapp_cloud_verify_token",
+        label: "Webhook verify token (you choose this string)",
+        secret: true,
+      },
+      {
+        name: "whatsapp_callback_number",
+        label: "Call-back number shown in messages",
+        secret: false,
+        placeholder: "9204298771",
+      },
+    ],
+  },
 ];
 
 const EMPTY_VALUES: ApiKeysInput = {
@@ -121,6 +150,10 @@ const EMPTY_VALUES: ApiKeysInput = {
   razorpay_webhook_secret: "",
   google_places_api_key: "",
   whatsapp_inbound_webhook_secret: "",
+  whatsapp_cloud_phone_number_id: "",
+  whatsapp_cloud_access_token: "",
+  whatsapp_cloud_verify_token: "",
+  whatsapp_callback_number: "",
 };
 
 export function ApiKeysForm({
@@ -141,6 +174,9 @@ export function ApiKeysForm({
     openai_compat_base_url: status[SETTING_KEYS.openaiCompatBaseUrl]?.plainValue ?? "",
     cloudinary_cloud_name: status[SETTING_KEYS.cloudinaryCloudName]?.plainValue ?? "",
     razorpay_key_id: status[SETTING_KEYS.razorpayKeyId]?.plainValue ?? "",
+    whatsapp_cloud_phone_number_id:
+      status[SETTING_KEYS.whatsappCloudPhoneNumberId]?.plainValue ?? "",
+    whatsapp_callback_number: status[SETTING_KEYS.whatsappCallbackNumber]?.plainValue ?? "",
   };
 
   const form = useForm<ApiKeysInput>({

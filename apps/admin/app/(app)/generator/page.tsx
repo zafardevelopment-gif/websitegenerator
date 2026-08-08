@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Globe } from "lucide-react";
 
+import { SETTING_KEYS } from "@aiwebsite/config";
+import { createAdminSupabase } from "@aiwebsite/db/admin";
 import { createServerSupabase } from "@aiwebsite/db/server";
 import { listSites } from "@aiwebsite/db/repositories/sites";
+import { getDecryptedSetting } from "@aiwebsite/db/settings";
 import type { LeadRow } from "@aiwebsite/db/types";
 import { Card, CardContent } from "@aiwebsite/ui";
 
@@ -34,6 +37,10 @@ export default async function GeneratorPage() {
   }
 
   const sitesUrl = sitesBaseUrl();
+  const callNumber = await getDecryptedSetting(
+    createAdminSupabase(),
+    SETTING_KEYS.whatsappCallbackNumber
+  ).catch(() => null);
 
   const cards: GeneratorSiteCard[] = sites.map((site) => {
     const lead = leadsById.get(site.lead_id);
@@ -78,7 +85,7 @@ export default async function GeneratorPage() {
           </CardContent>
         </Card>
       ) : (
-        <SiteCards sites={cards} />
+        <SiteCards sites={cards} callNumber={callNumber} />
       )}
     </div>
   );

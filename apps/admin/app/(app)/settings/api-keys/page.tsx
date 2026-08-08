@@ -25,6 +25,8 @@ export default async function ApiKeysPage() {
     SETTING_KEYS.cloudinaryCloudName,
     SETTING_KEYS.razorpayKeyId,
     SETTING_KEYS.googlePlacesApiKey,
+    SETTING_KEYS.whatsappCloudPhoneNumberId,
+    SETTING_KEYS.whatsappCallbackNumber,
   ]);
 
   return (

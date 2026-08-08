@@ -4,19 +4,51 @@ Working plan for the outreach engine on top of the existing platform.
 Phases run in order; each is independently shippable. **Status legend:**
 `⬜ pending` · `🟨 in progress` · `✅ done`
 
-**Business flow this serves**
+**Business flow (as-built)**
 
 ```
-lead import  →  AI generates demo site  →  site published on a demo slot
-     →  WhatsApp pitch sent (n8n)  →  owner opens site (tracked)
-     →  owner replies (n8n writes it back)  →  deal won / lost
-     →  won: migrate to client's own domain, slot recycled
-     →  lost/silent: slot auto-reclaimed after expiry
+lead import  →  AI generates demo site
+     →  WhatsApp pitch auto-sent via Meta Cloud API (demo_pitch_intro template)
+     →  delivery status tracked (sent → delivered → read)
+     →  owner replies → lead auto-advances to "interested"
+     →  reply_team_followup template auto-sent
+     →  deal won: migrate to client domain, slot recycled
+     →  deal lost / silent: slot auto-reclaimed after expiry
 ```
 
-Everything is tracked **inside this admin app**. n8n is only a transport
-layer: it sends WhatsApp messages out and posts replies back in. It never
-holds state of its own.
+n8n is optional — the Meta Cloud API webhook (`/api/webhooks/whatsapp-meta`)
+handles inbound messages natively. n8n can still be used as an alternate
+transport via `/api/webhooks/whatsapp-inbound` (HMAC-signed).
+
+---
+
+## To activate (pending Supabase + settings)
+
+Apply these migrations **in order** to your Supabase project:
+
+```
+supabase/migrations/0011_demo_slots.sql
+supabase/migrations/0012_slot_expiry_notifications.sql
+supabase/migrations/0013_phone_identity.sql
+supabase/migrations/0014_whatsapp_inbound.sql
+supabase/migrations/0015_domain_handoff.sql
+```
+
+Then in **Settings → API Keys → Meta WhatsApp Cloud API**:
+
+| Field | Where to find it |
+| --- | --- |
+| Phone Number ID | Meta for Developers → your app → WhatsApp → API Setup |
+| Permanent access token | Same page — generate a permanent token |
+| Webhook verify token | Choose any string; you'll paste the same one in Meta |
+| Call-back number | Your mobile number shown in outgoing messages |
+
+Finally in **Meta for Developers → WhatsApp → Configuration → Webhook**:
+- Callback URL: `https://<your-admin-domain>/api/webhooks/whatsapp-meta`
+- Verify token: the same string you saved above
+- Subscribe to: `messages`
+
+After that: generate a site → WhatsApp pitch fires automatically.
 
 ---
 
@@ -44,9 +76,9 @@ scroll-driven animations and degrades gracefully.
 
 ---
 
-## Phase 1 — Demo slot pool 🟨
+## Phase 1 — Demo slot pool ✅
 
-**Problem.** Every generated site currently takes its own permanent slug
+**Problem.** Every generated site takes its own permanent slug
 (`smile-dental.aivexallp.com`). Slugs are never released, so hosting grows
 without bound and a won deal leaves a dead subdomain behind.
 
@@ -70,11 +102,12 @@ a site for the length of a pitch, then returned.
 - [x] Slug rename blocked while a demo holds a pooled subdomain
 - [x] Admin UI `/settings/slots` — occupancy stats, holder + days left,
       manual release, disable/enable, grow pool, manual sweep
-- [ ] **Remaining:** run `tsc`/`next build` on Windows and apply migration
-      0011 to Supabase (sandbox here can't finish a full Next build)
+- [x] Build passes — ESLint fix in `media-manager.tsx` applied
 
 **Done when:** publishing a demo consumes a slot, winning or losing a deal
 returns it, and the pool view shows exactly which lead holds which slug.
+
+**Remaining:** apply migration `0011` to Supabase (code is fully deployed).
 
 ---
 
@@ -88,12 +121,10 @@ A 10-slot pool is exhausted in two weeks without automatic recycling.
       follow-up task, deduped per expiry via migration `0012`)
 - [x] At T-0: site → `expired`, slot → `cooldown` (via `releaseSlotForSite`),
       then the same cron sweeps `cooldown` → `free`
-- [x] Expired URL serves a branded holding page, not a 404 (already wired —
-      `HoldingPage kind="expired"` in `apps/sites`)
-- [x] "Extend 7 days" action for live conversations (already wired —
-      `extendDemoExpiryAction`)
+- [x] Expired URL serves a branded holding page, not a 404
+- [x] "Extend 7 days" action for live conversations (`extendDemoExpiryAction`)
 - [x] Never auto-expire a lead in `interested` / `meeting` / `negotiation` —
-      cron now joins lead status and postpones instead of expiring
+      cron joins lead status and postpones instead of expiring
 
 **Done when:** the pool sustains itself with no manual cleanup.
 
@@ -105,122 +136,101 @@ WhatsApp replies arrive as a bare phone number. Without canonical numbers,
 inbound messages can't be matched to a lead.
 
 - [x] Migration `0013_phone_identity.sql` — `phone_e164`, `whatsapp_e164`
-      trigger-maintained columns (not `GENERATED ALWAYS AS`, so the
-      normalization rule can change without a column rewrite) + partial
-      indexes. **Not unique** — two leads can legitimately share a number;
-      see the ambiguity rule below instead of a DB constraint
-- [x] Backfill existing leads to E.164 (`+91…`) — one-time `update` in the
-      migration
-- [x] Normalize on every write path: the trigger fires on *any* insert/update
-      to `phone`/`whatsapp`, so import, manual create, and Google Places all
-      get normalized automatically with zero app-code changes
-- [x] `findLeadByPhone(e164)` resolver (`packages/db/src/repositories/leads.ts`)
-      — checks both `phone_e164` and `whatsapp_e164`; returns `ambiguous: true`
-      instead of guessing when more than one active lead matches
-- [x] Inbound direction on messages: `direction` enum (`outbound|inbound`,
-      defaults `outbound`), `replied_at` on the lead
+      trigger-maintained columns + partial indexes. Not unique — two leads
+      can share a number; ambiguity rule handles this instead of a DB constraint
+- [x] Backfill existing leads to E.164 (`+91…`) — one-time `UPDATE` in the
+      migration runs automatically
+- [x] Normalize on every write path — the trigger fires on any
+      insert/update to `phone`/`whatsapp`, so import, manual create, and
+      Google Places all normalize automatically with zero app-code changes
+- [x] `findLeadByPhone(e164)` resolver — checks both `phone_e164` and
+      `whatsapp_e164`; returns `ambiguous: true` instead of guessing when
+      more than one active lead matches
+- [x] `direction` enum (`outbound|inbound`) on messages; `replied_at` on lead
 
 **Done when:** any Indian phone format resolves to exactly one lead.
 
 ---
 
-## Phase 4 — Inbound webhook for n8n ✅
+## Phase 4 — Inbound webhook ✅
 
-The single API surface n8n writes back to.
+The single API surface for receiving WhatsApp replies.
 
 - [x] `POST /api/webhooks/whatsapp-inbound` — HMAC-SHA256 signed
-      (`X-Webhook-Signature`, same scheme as the Razorpay webhook)
-- [x] Resolves lead by `phone_e164`/`whatsapp_e164` via `findLeadByPhone`,
-      stores an inbound message (`direction: "inbound"`), appends a
-      `message_received` lead activity, fires an `inbound_reply` notification
-- [x] Auto-advances status `whatsapp_sent`/`demo_viewed`/`waiting` →
-      `interested` on first reply, never downgrades a lead already at
-      `interested` or later
-- [x] Delivery-status callback (`{"event":"status", ...}` →
-      `sent / delivered / read(opened) / failed`), rank-gated so a
-      re-delivered "sent" can't undo a "read"
-- [x] Idempotent on `provider_message_id` (checked before insert, and before
-      any status update)
-- [x] Shared secret in Settings → API Keys → n8n / WhatsApp inbound,
-      rotatable from the UI (`WHATSAPP_INBOUND_WEBHOOK_SECRET` env wins)
-- [x] Ambiguous or unmatched numbers never auto-attach — flagged via an
-      `inbound_reply_ambiguous` notification instead (the Phase 3 rule)
+      (`X-Webhook-Signature`), replay-protected via `provider_message_id`
+- [x] `GET /POST /api/webhooks/whatsapp-meta` — native Meta Cloud API webhook
+      (no n8n hop); handles both inbound messages and delivery-status callbacks
+      natively; `GET` handles Meta's verify-token handshake
+- [x] Resolves lead by `phone_e164` / `whatsapp_e164` via `findLeadByPhone`,
+      stores inbound message, appends `message_received` activity, fires
+      `inbound_reply` notification
+- [x] Auto-advances status `whatsapp_sent` / `demo_viewed` / `waiting` →
+      `interested` on first reply; never downgrades a later pipeline stage
+- [x] Delivery-status callback (`sent → delivered → read(opened) → failed`),
+      rank-gated so a retried "sent" cannot undo a "read"
+- [x] Idempotent on `provider_message_id`
+- [x] `reply_team_followup` template auto-sent on first reply if Cloud API
+      is configured
+- [x] Ambiguous / unmatched numbers flagged via `inbound_reply_ambiguous`
+      notification, never auto-attached
 
-**Done when:** a POST from n8n shows up on the lead timeline within seconds.
+**Done when:** a reply from the business owner shows up on the lead timeline
+within seconds of them hitting send.
 
 ---
 
 ## Phase 5 — Engagement signals on the lead timeline ✅
 
-The strongest closing signal is "they opened the site". Tracking already
-exists (`/api/track`) but never surfaces where decisions get made.
+The strongest closing signal is "they opened the site".
 
 - [x] Lead detail: opened / not opened, first + last view, view count,
-      time on page, which sections were read, CTA clicks — new
-      `getSiteEngagement` in `packages/db/src/repositories/tracking.ts`,
-      rendered as an "Engagement" card on the lead page
-- [x] `demo_viewed` status auto-set on first real view (bots filtered) —
-      this was already wired in `/api/track/visit`
-- [x] Leads list: "viewed but silent" quick filter (`leads-toolbar.tsx`) —
-      the highest-intent segment is exactly `status = demo_viewed` (viewed,
-      hasn't progressed); Phase 4's inbound webhook already moves a lead
-      off this status the moment they reply
-- [x] Feed engagement into the existing health score — `runHealthScoreAction`
-      now computes `conversion_score` from real CTA-click/visitor ratio and
-      folds it into the overall score average
+      time on page, which sections were read, CTA clicks
+- [x] `demo_viewed` status auto-set on first real view (bots filtered)
+- [x] Leads list: "viewed but silent" quick filter — highest-intent segment
+- [x] Engagement feeds into the existing health score
 
 **Done when:** you can sort the pipeline by who actually looked.
 
 ---
 
-## Phase 6 — n8n workflow ✅
+## Phase 6 — WhatsApp Cloud API auto-send ✅
 
-Only now, once the app owns all the state.
+Approved templates: `demo_pitch_intro` (Marketing) + `reply_team_followup` (Utility).
 
-- [x] Exportable workflow JSON committed to `integrations/n8n/`
-      (`outbound-whatsapp.workflow.json`, `inbound-whatsapp.workflow.json`)
-- [x] Outbound: n8n polls `GET /api/automation/outreach-queue` (new,
-      HMAC-signed) → sends via WhatsApp Cloud API → reports back to
-      `POST /api/automation/log-sent` (new, HMAC-signed)
-- [x] Inbound: n8n's webhook receives replies/status callbacks → forwards
-      to the Phase 4 webhook (`/api/webhooks/whatsapp-inbound`)
-- [x] Follow-up ladder: rides the templates already seeded in Settings →
-      Prompts — pitch → `day2` → `day5` → `day10` (final), each rung gated
-      on the previous message's age with no reply; a lead falls off the
-      instant it replies or advances past `waiting`
-- [x] Quiet hours + per-day send cap — cron expression restricted to a
-      sending window, `limit` param + a documented per-day counter pattern
-      (see `integrations/n8n/README.md` §3)
-- [x] Setup guide (`integrations/n8n/README.md`) covering the WhatsApp
-      Cloud API approved-template requirement, the HMAC signing scheme,
-      and step-by-step node configuration for both workflows
+- [x] `lib/server/whatsapp-cloud.ts` — Meta Cloud API sender
+      (`sendWhatsAppTemplate`, `sendWhatsAppFreeform`); `WhatsAppCloudError`
+      with provider error forwarding
+- [x] `lib/whatsapp-pitch.ts` — sector-specific pitch text shared by manual
+      dialog and auto-send (`buildDemoPitchText`, `buildDemoPitchTemplateParams`,
+      `buildReplyFollowupTemplateParams`); 5 sector regexes, `useDrGreeting`
+      for dental leads
+- [x] Auto-send on generate — `autoSendDemoPitch()` in `generator.ts` fires
+      `demo_pitch_intro` right after site generation; no-ops if Cloud API
+      isn't configured (manual send remains available)
+- [x] `toWaId()` normalizes any format to WhatsApp's digit-only id
+      (10-digit local → `91XXXXXXXXXX`)
+- [x] Settings UI — Settings → API Keys → "Meta WhatsApp Cloud API" group
+      (Phone Number ID, permanent access token, verify token, callback number)
+- [x] Dashboard WhatsApp card: sent / delivered / read / failed + reply rate
+      + live feed of recent inbound messages (`getWhatsAppStats`,
+      `listRecentWhatsAppReplies`)
+- [x] Both templates `demo_pitch_intro` and `reply_team_followup` approved
+      on Meta Business Manager (2026-08-08)
 
-**Done when:** a lead moves from `website_generated` to a captured reply
-without anyone touching a keyboard.
+**Done when:** generate a site → pitch fires → reply lands on lead timeline.
 
 ---
 
 ## Phase 7 — Won-deal migration ✅
 
 - [x] Guided flow: attach client domain → Vercel domain add → DNS
-      instructions → verify → flip site to `production` — this was already
-      built (`convertLeadToClientAction`, `addDomainAction`,
-      `verifyDomainAction`); Phase 7 wired the last step, the hand-off
-- [x] 301 from the demo slot to the client domain during a grace window —
-      `verifyDomainAction` now sets `redirect_to_domain` +
-      `redirect_grace_ends_at` (14 days) on the site the moment the custom
-      domain verifies; `apps/sites` issues a `permanentRedirect` for any
-      visit to the old demo slug while the window is open
-- [x] Release the slot back to the pool when the grace window ends —
-      the Phase 2 cron (`/api/cron/expire-demos`) now also sweeps expired
-      hand-offs and releases the slot with no cooldown (it was never shown
-      to a new prospect during the redirect window)
-- [x] Client handover pack (credentials, what they own, what renews) —
-      `generateHandoverPackAction` renders a PDF (live URL, domain/renewal
-      dates from the client record, ownership breakdown, support contact);
-      download button on each client card in `/clients`
+      instructions → verify → flip site to `production`
+- [x] 301 from the demo slot to the client domain during a 14-day grace window
+- [x] Release the slot back to the pool when the grace window ends
+- [x] Client handover pack PDF (live URL, domain/renewal dates, ownership
+      breakdown, support contact) — `generateHandoverPackAction`
 
-Migration `0015_domain_handoff.sql` adds the two new columns this needed.
+Migration `0015_domain_handoff.sql` adds the two columns this needed.
 
 **Done when:** winning a deal is a single guided flow, not a checklist.
 
@@ -230,11 +240,12 @@ Migration `0015_domain_handoff.sql` adds the two new columns this needed.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Cold WhatsApp outreach outside the 24-hour window requires an **approved template message** on the Cloud API | Number ban, pipeline dead | Decide official Cloud API vs. manual send **before** Phase 6; keep manual send as fallback |
-| Two leads sharing one phone number | Reply lands on the wrong lead | Ambiguity rule in Phase 3 — never auto-attach, flag for review |
-| Demo slot reused while the old URL is still circulating | Wrong business shown to a prospect | `cooldown` state (Phase 1) + expired holding page (Phase 2) |
-| Generated content misstates a real business's facts | Trust damage on first contact | Testimonials already labelled as samples; keep facts sourced from Google Places only |
+| Meta permanent access token expires | Auto-send silently fails | Use a System User token (never expires) from Meta Business Settings, not the temporary one from API Setup |
+| Two leads sharing one phone number | Reply lands on wrong lead | `ambiguous: true` rule (Phase 3) — flags for review, never auto-attaches |
+| Demo slot reused while old URL is circulating | Wrong business shown | `cooldown` state (Phase 1) + expired holding page (Phase 2) |
+| Generated content misstates a real business's facts | Trust damage on first contact | Testimonials labelled as samples; facts sourced from Google Places only |
+| WhatsApp session window (24h) for freeform replies | Can't reply freeform after 24h | Always use approved templates for business-initiated messages; freeform only within the window |
 
 ---
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-08_

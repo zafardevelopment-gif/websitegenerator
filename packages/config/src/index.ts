@@ -112,6 +112,11 @@ export const SETTING_KEYS = {
   googlePlacesApiKey: "google_places_api_key",
   // n8n / WhatsApp inbound (Phase 4)
   whatsappInboundWebhookSecret: "whatsapp_inbound_webhook_secret",
+  // Meta WhatsApp Cloud API — outbound sends + native inbound webhook
+  whatsappCloudPhoneNumberId: "whatsapp_cloud_phone_number_id",
+  whatsappCloudAccessToken: "whatsapp_cloud_access_token",
+  whatsappCloudVerifyToken: "whatsapp_cloud_verify_token",
+  whatsappCallbackNumber: "whatsapp_callback_number",
 } as const;
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 
@@ -128,6 +133,8 @@ export const SECRET_SETTING_KEYS: readonly SettingKey[] = [
   SETTING_KEYS.pagespeedApiKey,
   SETTING_KEYS.googlePlacesApiKey,
   SETTING_KEYS.whatsappInboundWebhookSecret,
+  SETTING_KEYS.whatsappCloudAccessToken,
+  SETTING_KEYS.whatsappCloudVerifyToken,
 ] as const;
 
 export function isSecretSettingKey(key: SettingKey): boolean {

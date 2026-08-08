@@ -4,9 +4,16 @@ import { createAdminSupabase } from "@aiwebsite/db/admin";
 import { createNotification } from "@aiwebsite/db/repositories/notifications";
 import { findLeadByPhone, logLeadActivity, normalizePhoneE164, updateLead } from "@aiwebsite/db/repositories/leads";
 import { createMessage, getMessageByExternalId, updateMessage } from "@aiwebsite/db/repositories/messages";
-import type { LeadStatus, MessageStatus } from "@aiwebsite/db/types";
+import type { LeadRow, LeadStatus, MessageStatus } from "@aiwebsite/db/types";
 
 import { getInboundWebhookSecret, verifyInboundSignature } from "@/lib/server/whatsapp-inbound";
+import {
+  getWhatsAppCallbackNumber,
+  isWhatsAppCloudConfigured,
+  sendWhatsAppTemplate,
+  WHATSAPP_TEMPLATES,
+} from "@/lib/server/whatsapp-cloud";
+import { buildReplyFollowupTemplateParams } from "@/lib/whatsapp-pitch";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +34,7 @@ export const dynamic = "force-dynamic";
  * `WHATSAPP_INBOUND_WEBHOOK_SECRET` env wins if set).
  */
 
-interface InboundMessageBody {
+export interface InboundMessageBody {
   event?: "message";
   from: string;
   body: string;
@@ -35,7 +42,7 @@ interface InboundMessageBody {
   timestamp?: string;
 }
 
-interface StatusCallbackBody {
+export interface StatusCallbackBody {
   event: "status";
   provider_message_id: string;
   status: "sent" | "delivered" | "read" | "failed";
@@ -103,7 +110,7 @@ export async function POST(request: NextRequest) {
   return handleInboundMessage(db, body);
 }
 
-async function handleStatusCallback(db: ReturnType<typeof createAdminSupabase>, body: StatusCallbackBody) {
+export async function handleStatusCallback(db: ReturnType<typeof createAdminSupabase>, body: StatusCallbackBody) {
   if (!body.provider_message_id || !body.status) {
     return NextResponse.json({ ok: false, error: "provider_message_id and status are required" }, { status: 400 });
   }
@@ -132,7 +139,7 @@ async function handleStatusCallback(db: ReturnType<typeof createAdminSupabase>, 
   return NextResponse.json({ ok: true, status: nextStatus });
 }
 
-async function handleInboundMessage(db: ReturnType<typeof createAdminSupabase>, body: InboundMessageBody) {
+export async function handleInboundMessage(db: ReturnType<typeof createAdminSupabase>, body: InboundMessageBody) {
   if (!body.from || !body.body) {
     return NextResponse.json({ ok: false, error: "from and body are required" }, { status: 400 });
   }
@@ -202,5 +209,39 @@ async function handleInboundMessage(db: ReturnType<typeof createAdminSupabase>, 
     detail: { message_id: message.id, preview: body.body.slice(0, 200) },
   });
 
+  // Best effort — a reply is recorded above regardless of whether the
+  // auto follow-up succeeds (unconfigured Cloud API, unapproved template).
+  await sendReplyFollowup(db, lead).catch((e) => {
+    console.error("Auto reply-followup send failed:", e);
+  });
+
   return NextResponse.json({ ok: true, lead_id: lead.id, message_id: message.id });
+}
+
+/** Sends the approved `reply_team_followup` template once a lead's first reply comes in. */
+async function sendReplyFollowup(db: ReturnType<typeof createAdminSupabase>, lead: LeadRow) {
+  const phone = lead.whatsapp ?? lead.phone;
+  if (!phone) return;
+  if (!(await isWhatsAppCloudConfigured())) return;
+
+  const callNumber = (await getWhatsAppCallbackNumber()) ?? "";
+  const messageId = await sendWhatsAppTemplate({
+    to: phone,
+    template: WHATSAPP_TEMPLATES.replyFollowup,
+    bodyParams: buildReplyFollowupTemplateParams({
+      ownerName: lead.owner_name,
+      category: lead.category,
+      callNumber,
+    }),
+  });
+
+  await createMessage(db, {
+    lead_id: lead.id,
+    channel: "whatsapp",
+    body: `Thanks for your reply, ${lead.owner_name ?? "there"} — our team will contact you shortly. Call ${callNumber} anytime.`,
+    status: "sent",
+    direction: "outbound",
+    external_id: messageId,
+    sent_at: new Date().toISOString(),
+  });
 }

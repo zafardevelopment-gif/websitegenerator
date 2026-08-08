@@ -546,8 +546,8 @@ export function MediaManager({
           <DialogHeader>
             <DialogTitle>Import photos from Google</DialogTitle>
             <DialogDescription>
-              {leadName ? `Business photos from ${leadName}'s Google listing.` : "Business photos."}{" "}
-              Pick the ones worth using — they&apos;ll be copied into this lead&apos;s media folder.
+              {leadName ? `Business photos from ${leadName}’s Google listing.` : "Business photos."}{" "}
+              Pick the ones worth using {"—"} they{"’"}ll be copied into this lead{"’"}s media folder.
             </DialogDescription>
           </DialogHeader>
           {googleLoading ? (

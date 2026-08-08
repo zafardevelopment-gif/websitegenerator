@@ -1,14 +1,33 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Bot, CheckCircle2, Circle, Flame } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  CheckCircle2,
+  Circle,
+  Flame,
+  MessageCircle,
+  MessageCircleReply,
+  Percent,
+} from "lucide-react";
 
 import { SETTING_KEYS } from "@aiwebsite/config";
 import { isEncryptionConfigured } from "@aiwebsite/db/crypto";
 import { createServerSupabase } from "@aiwebsite/db/server";
 import { getMonthlyAiCost, type AiMonthlyCost } from "@aiwebsite/db/repositories/ai-usage";
+import { countLeadsByStatus } from "@aiwebsite/db/repositories/leads";
+import {
+  getWhatsAppStats,
+  listRecentWhatsAppReplies,
+  type RecentReply,
+  type WhatsAppStats,
+} from "@aiwebsite/db/repositories/messages";
 import { getAgencyProfile, getSettingsStatus } from "@aiwebsite/db/settings";
 import { listHotLeads, type HotLeadRow } from "@aiwebsite/db/repositories/tracking";
+import type { LeadStatus } from "@aiwebsite/db/types";
 import { getUserProfile } from "@aiwebsite/db/users";
 
+import { LEAD_STATUS_LABELS } from "@/lib/lead-meta";
 import { loadAiConfig } from "@/lib/server/ai-engine";
 import { demoUrl } from "@/lib/urls";
 import {
@@ -22,6 +41,15 @@ import {
   Separator,
 } from "@aiwebsite/ui";
 import { formatRelative } from "@/lib/format";
+
+const FUNNEL_SUMMARY: LeadStatus[] = [
+  "new",
+  "website_generated",
+  "whatsapp_sent",
+  "demo_viewed",
+  "interested",
+  "won",
+];
 
 interface ChecklistItem {
   label: string;
@@ -66,6 +94,21 @@ export default async function DashboardPage() {
     hotLeads = await listHotLeads(supabase, 48, 8);
   } catch {
     hotLeads = [];
+  }
+
+  let waStats: WhatsAppStats | null = null;
+  let recentReplies: RecentReply[] = [];
+  let funnelCounts: Record<LeadStatus, number> | null = null;
+  try {
+    [waStats, recentReplies, funnelCounts] = await Promise.all([
+      getWhatsAppStats(supabase, 30),
+      listRecentWhatsAppReplies(supabase, 6),
+      countLeadsByStatus(supabase),
+    ]);
+  } catch {
+    waStats = null;
+    recentReplies = [];
+    funnelCounts = null;
   }
 
   const checklist: ChecklistItem[] = [
@@ -155,6 +198,116 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4 text-success" />
+              WhatsApp outreach
+              <Badge variant="outline" className="ml-auto text-[10px]">
+                Last 30 days
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Auto-sent on generate via Meta Cloud API, plus manual sends from the generator page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {waStats === null ? (
+              <p className="text-sm text-muted-foreground">
+                No WhatsApp activity yet — messages will show up here once you generate a site or
+                send from a lead.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {[
+                    { label: "Sent", value: waStats.sent },
+                    { label: "Delivered", value: waStats.delivered },
+                    { label: "Read", value: waStats.read },
+                    { label: "Replied", value: waStats.repliedLeads },
+                    { label: "Failed", value: waStats.failed },
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-md border p-2.5 text-center">
+                      <p className="text-xl font-semibold tabular-nums">{stat.value}</p>
+                      <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-sm">
+                  <Percent className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium tabular-nums">
+                    {Math.round(waStats.replyRate * 100)}%
+                  </span>
+                  <span className="text-muted-foreground">reply rate</span>
+                </div>
+
+                {recentReplies.length > 0 && (
+                  <div className="mt-4 space-y-2 border-t pt-3">
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      <MessageCircleReply className="h-3.5 w-3.5" />
+                      Recent replies
+                    </p>
+                    {recentReplies.map((reply) => (
+                      <Link
+                        key={reply.id}
+                        href={`/leads/${reply.leadId}`}
+                        className="block rounded-md p-1.5 text-sm hover:bg-muted"
+                      >
+                        <span className="font-medium">{reply.businessName}</span>
+                        <span className="text-muted-foreground"> · {formatRelative(reply.createdAt)}</span>
+                        <p className="truncate text-xs text-muted-foreground">{reply.body}</p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline snapshot</CardTitle>
+            <CardDescription>Leads at each stage right now.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {funnelCounts === null ? (
+              <p className="text-sm text-muted-foreground">No lead data yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {FUNNEL_SUMMARY.map((status) => {
+                  const count = funnelCounts?.[status] ?? 0;
+                  const max = Math.max(1, ...FUNNEL_SUMMARY.map((s) => funnelCounts?.[s] ?? 0));
+                  return (
+                    <div key={status} className="flex items-center gap-3">
+                      <span className="w-32 shrink-0 truncate text-xs text-muted-foreground">
+                        {LEAD_STATUS_LABELS[status]}
+                      </span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${(count / max) * 100}%` }}
+                        />
+                      </div>
+                      <span className="w-8 shrink-0 text-right text-xs font-medium tabular-nums">
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })}
+                <Link
+                  href="/analytics"
+                  className="inline-flex items-center gap-1 pt-1 text-xs font-medium text-primary hover:underline"
+                >
+                  Full funnel &amp; analytics <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

@@ -37,5 +37,13 @@ export const apiKeysSchema = z.object({
   razorpay_webhook_secret: z.string().trim().max(300),
   google_places_api_key: z.string().trim().max(300),
   whatsapp_inbound_webhook_secret: z.string().trim().max(300),
+  whatsapp_cloud_phone_number_id: z.string().trim().max(100),
+  whatsapp_cloud_access_token: z.string().trim().max(2000),
+  whatsapp_cloud_verify_token: z.string().trim().max(300),
+  whatsapp_callback_number: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-() ]*$/, "Digits, +, -, ( ) and spaces only")
+    .max(20),
 });
 export type ApiKeysInput = z.infer<typeof apiKeysSchema>;

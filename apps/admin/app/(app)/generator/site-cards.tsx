@@ -38,7 +38,13 @@ export type GeneratorSiteCard = {
   category: string | null;
 };
 
-export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
+export function SiteCards({
+  sites,
+  callNumber,
+}: {
+  sites: GeneratorSiteCard[];
+  callNumber?: string | null;
+}) {
   const [target, setTarget] = React.useState<WhatsAppTarget | null>(null);
   const [query, setQuery] = React.useState("");
   const [leadStatus, setLeadStatus] = React.useState<LeadStatus | "all">("all");
@@ -174,6 +180,7 @@ export function SiteCards({ sites }: { sites: GeneratorSiteCard[] }) {
                       phone: site.phone,
                       demoLink: site.demoLink,
                       category: site.category,
+                      callNumber,
                     })
                   }
                 >
